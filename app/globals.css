@@ -24,3 +24,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Microsoft YaHei', 'Inter', sans-serif;
+}
+.sidebar .nav-item.active {
+  color: #E86F76 !important;
+  background: #FDF2F2 !important;
+  border-left: 3px solid #E86F76 !important;
+}
