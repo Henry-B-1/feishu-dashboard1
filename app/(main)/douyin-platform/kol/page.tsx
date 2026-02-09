@@ -1,6 +1,6 @@
 'use client'
 import React, { useState } from 'react';
-import { ArrowUp, ArrowDown, BarChart2, Users, MessageSquare, TrendingUp } from 'lucide-react';
+import { ArrowUp, ArrowDown, Users } from 'lucide-react';
 
 // ========== 核心类型定义 ==========
 type KolMatrixData = {
@@ -294,9 +294,14 @@ const formatTrend = (item: string | { value: number; trend: 'up' | 'down' }) => 
   );
 };
 
+// 🔥 修复：先判断类型是string，再判断是否等于'-'
 // 格式化数字（千分位）
 const formatNumber = (num: string | number) => {
-  if (typeof num === 'string' || num === '-') return num;
+  // 先判断是否是字符串类型，再判断是否是 '-'
+  if (typeof num === 'string') {
+    return num; // 如果是字符串（包括 '-'），直接返回
+  }
+  // 只有数字类型才进行千分位格式化
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 };
 
@@ -381,8 +386,6 @@ export default function DouyinKolPage() {
       <div className="max-w-6xl mx-auto">
         <KolMatrixTable product={activeProduct} />
       </div>
-
-
     </div>
   );
 }

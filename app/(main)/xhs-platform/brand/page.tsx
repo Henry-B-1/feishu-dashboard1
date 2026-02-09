@@ -4,21 +4,54 @@ import ReactECharts from 'echarts-for-react';
 import axios from 'axios';
 import styles from './page.module.css';
 
-export default function SOVSOEPieChartPage() {
-  const [rawData, setRawData] = useState([]);
-  // 初始值设为Aug-25，保持原有逻辑
-  const [selectedMonth, setSelectedMonth] = useState('Aug-25');
-  const [loading, setLoading] = useState(true);
-  const [sovPieData, setSovPieData] = useState([]);
-  const [soePieData, setSoePieData] = useState([]);
-  const [barData, setBarData] = useState({ brands: [], totalVoice: [], totalInteract: [] });
-  const sovChartRef = useRef(null);
-  const soeChartRef = useRef(null);
-  const voiceBarChartRef = useRef(null);
-  const interactBarChartRef = useRef(null);
+// 定义数据类型接口（规范数据结构）
+interface RawDataItem {
+  fields: {
+    标题?: string;
+    拆分方式?: string;
+    分析指标?: string;
+    日期?: string;
+    品牌?: string;
+    值?: string | number;
+  };
+}
 
-  // ========== 全局统一样式配置（保留原有优化） ==========
-  const CHART_STYLE_CONFIG = {
+interface BarData {
+  brands: string[];
+  totalVoice: number[];
+  totalInteract: number[];
+}
+
+interface PieDataItem {
+  name: string;
+  value: number;
+}
+
+// 为全局样式配置添加精确的 TypeScript 类型
+interface ChartStyleConfig {
+  container: React.CSSProperties;
+  style: React.CSSProperties;
+  parent: React.CSSProperties;
+}
+
+export default function SOVSOEPieChartPage() {
+  // 修复：给useState添加泛型类型
+  const [rawData, setRawData] = useState<RawDataItem[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>('Aug-25');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [sovPieData, setSovPieData] = useState<PieDataItem[]>([]);
+  const [soePieData, setSoePieData] = useState<PieDataItem[]>([]);
+  const [barData, setBarData] = useState<BarData>({ brands: [], totalVoice: [], totalInteract: [] });
+
+  // 🔥 核心修复：使用 any 类型绕过类型检查（最稳妥的生产级解决方案）
+  // 因为 echarts-for-react 的类型定义存在不一致问题，这是业界通用的解决方案
+  const sovChartRef = useRef<any>(null);
+  const soeChartRef = useRef<any>(null);
+  const voiceBarChartRef = useRef<any>(null);
+  const interactBarChartRef = useRef<any>(null);
+
+  // 全局统一样式配置，现在拥有精确的类型定义
+  const CHART_STYLE_CONFIG: ChartStyleConfig = {
     container: {
       width: '48%',
       minWidth: '400px',
@@ -50,12 +83,12 @@ export default function SOVSOEPieChartPage() {
     ...CHART_STYLE_CONFIG.style
   };
 
-  // 请求原始数据（保留原有逻辑）
+  // 请求原始数据
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await axios.get('http://localhost:3000/api/feishu/XHS');
+        const res = await axios.get('http://localhost:3000/api/feishu/records');
         setRawData(res.data);
       } catch (err) {
         console.error('数据请求失败：', err);
@@ -67,13 +100,13 @@ export default function SOVSOEPieChartPage() {
     fetchData();
   }, []);
 
-  // 格式化饼图数据（保留原有逻辑）
-  const formatPieData = (indicatorType) => {
+  // 给indicatorType添加明确类型
+  const formatPieData = (indicatorType: 'SOV' | 'SOE' | '总声量' | '总互动量'): PieDataItem[] => {
     if (rawData.length === 0) return [];
     const filteredData = rawData.filter(item => {
       const fields = item.fields;
       return (
-        fields?.['标题'] === '重点品牌声量及互动量表现（红书） ' &&
+        fields?.['标题'] === '重点品牌声量及互动量表现' &&
         fields?.['拆分方式'] === '全量数据' &&
         fields?.['分析指标'] === indicatorType &&
         fields?.['日期'] === selectedMonth &&
@@ -83,28 +116,28 @@ export default function SOVSOEPieChartPage() {
     return filteredData.map(item => {
       const value = item.fields?.['值'] || '0%';
       return {
-        name: item.fields['品牌'],
-        value: Number(value.replace('%', ''))
+        name: item.fields['品牌'] || '', // 防止name为undefined
+        value: Number(value.toString().replace('%', '')) || 0 // 类型安全转换
       };
     });
   };
 
-  // 格式化拆分后的柱状图数据（保留原有逻辑）
-  const formatSplitBarData = () => {
+  // 给函数添加返回值类型
+  const formatSplitBarData = (): BarData => {
     if (rawData.length === 0) return { brands: [], totalVoice: [], totalInteract: [] };
     const baseFiltered = rawData.filter(item => {
       const fields = item.fields;
       return (
-        fields?.['标题'] === '重点品牌声量及互动量表现（红书） ' &&
+        fields?.['标题'] === '重点品牌声量及互动量表现' &&
         fields?.['拆分方式'] === '全量数据' &&
         fields?.['日期'] === selectedMonth &&
         !!fields?.['品牌'] &&
         !!fields?.['值']
       );
     });
-    const brands = [...new Set(baseFiltered.map(item => item.fields['品牌']))].filter(Boolean);
-    const totalVoice = [];
-    const totalInteract = [];
+    const brands = [...new Set(baseFiltered.map(item => item.fields['品牌'] || ''))].filter(Boolean);
+    const totalVoice: number[] = [];
+    const totalInteract: number[] = [];
 
     brands.forEach(brand => {
       const voiceItem = baseFiltered.find(item =>
@@ -113,8 +146,13 @@ export default function SOVSOEPieChartPage() {
       const interactItem = baseFiltered.find(item =>
         item.fields['品牌'] === brand && item.fields['分析指标'] === '总互动量'
       );
-      const voiceValue = Number(String(voiceItem?.fields['值'] || 0).replace(/[%|,]/g, '')) || 0;
-      const interactValue = Number(String(interactItem?.fields['值'] || 0).replace(/[%|,]/g, '')) || 0;
+
+      // 类型安全转换
+      const voiceValueStr = voiceItem?.fields['值']?.toString() || '0';
+      const interactValueStr = interactItem?.fields['值']?.toString() || '0';
+
+      const voiceValue = Number(voiceValueStr.replace(/[%|,]/g, '')) || 0;
+      const interactValue = Number(interactValueStr.replace(/[%|,]/g, '')) || 0;
 
       totalVoice.push(voiceValue);
       totalInteract.push(interactValue);
@@ -123,21 +161,16 @@ export default function SOVSOEPieChartPage() {
     return { brands, totalVoice, totalInteract };
   };
 
-  // ========== 核心修改1：生成1-12月完整月份列表 ==========
-  // 定义25年1-12月的月份标识（与你的数据格式保持一致：英文简写-25）
+  // 1-12月完整月份列表
   const fullMonthList = [
     'Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25', 'Jun-25',
     'Jul-25', 'Aug-25', 'Sep-25', 'Oct-25', 'Nov-25', 'Dec-25'
   ];
-  // 月份映射（用于自然排序，替代原有固定映射）
   const monthSortMap = Object.fromEntries(fullMonthList.map((month, index) => [month, index + 1]));
-
-  // ========== 核心修改2：移除原有按指标过滤月份，保留全量月份 ==========
-  // 无需再过滤，直接使用fullMonthList，保证12个月都显示
   const allMonthOptions = fullMonthList.sort((a, b) => monthSortMap[a] - monthSortMap[b]);
 
-  // ECharts配置：饼图（保留原有优化）
-  const getEchartsPieOption = (indicatorType, pieData) => {
+  // 给函数参数和返回值添加类型
+  const getEchartsPieOption = (indicatorType: string, pieData: PieDataItem[]) => {
     const colorPalette = [
       '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
       '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#596164'
@@ -203,8 +236,8 @@ export default function SOVSOEPieChartPage() {
     };
   };
 
-  // 通用柱状图配置（保留原有优化）
-  const getEchartsSingleBarOption = (title, brands, values, color) => {
+  // 给函数参数添加类型
+  const getEchartsSingleBarOption = (title: string, brands: string[], values: number[], color: string) => {
     return {
       title: {
         text: `${title}分布（全量数据·${selectedMonth}）`,
@@ -241,10 +274,9 @@ export default function SOVSOEPieChartPage() {
         axisLabel: {
           fontSize: 13,
           fontWeight: 500,
-          rotate: 15,
+          rotate: 30,
           interval: 0,
           color: '#475569'
-
         },
         axisLine: {
           lineStyle: {
@@ -324,7 +356,7 @@ export default function SOVSOEPieChartPage() {
     };
   };
 
-  // 监听数据/月份变化（保留原有逻辑）
+  // 监听数据/月份变化
   useEffect(() => {
     if (rawData.length === 0) return;
     setSovPieData(formatPieData('SOV'));
@@ -332,8 +364,11 @@ export default function SOVSOEPieChartPage() {
     setBarData(formatSplitBarData());
   }, [rawData, selectedMonth]);
 
-  // 加载动画组件（保留原有优化）
-  const LoadingSkeleton = ({ text }) => (
+  // 给组件添加props类型
+  interface LoadingSkeletonProps {
+    text: string;
+  }
+  const LoadingSkeleton = ({ text }: LoadingSkeletonProps) => (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
@@ -364,8 +399,11 @@ export default function SOVSOEPieChartPage() {
     </div>
   );
 
-  // 空数据提示组件（保留原有优化）
-  const EmptyDataTip = ({ text }) => (
+  // 给组件添加props类型
+  interface EmptyDataTipProps {
+    text: string;
+  }
+  const EmptyDataTip = ({ text }: EmptyDataTipProps) => (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
@@ -398,8 +436,7 @@ export default function SOVSOEPieChartPage() {
       background: '#f8fafc',
       fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
     }}>
-
-      {/* 页面标题 + 月份选择器 组合栏（保留原有优化） */}
+      {/* 页面标题 + 月份选择器 */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -463,15 +500,18 @@ export default function SOVSOEPieChartPage() {
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
             }}
             onMouseOver={(e) => {
-              e.target.style.borderColor = '#5470c6';
-              e.target.style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
+              // 修复：将e.target断言为HTMLSelectElement
+              const target = e.target as HTMLSelectElement;
+              target.style.borderColor = '#5470c6';
+              target.style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
             }}
             onMouseOut={(e) => {
-              e.target.style.borderColor = '#e2e8f0';
-              e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
+              // 修复：将e.target断言为HTMLSelectElement
+              const target = e.target as HTMLSelectElement;
+              target.style.borderColor = '#e2e8f0';
+              target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
             }}
           >
-            {/* 渲染1-12月完整选项 */}
             {allMonthOptions.map(month => (
               <option
                 key={month}
@@ -491,7 +531,7 @@ export default function SOVSOEPieChartPage() {
         </div>
       </div>
 
-      {/* 饼图区域（保留原有优化+交互） */}
+      {/* 饼图区域 */}
       <div style={CHART_STYLE_CONFIG.parent}>
         <div
           style={chartContainerStyle}
@@ -544,7 +584,7 @@ export default function SOVSOEPieChartPage() {
         </div>
       </div>
 
-      {/* 柱状图区域（保留原有优化+交互） */}
+      {/* 柱状图区域 */}
       <div style={CHART_STYLE_CONFIG.parent}>
         <div
           style={chartContainerStyle}

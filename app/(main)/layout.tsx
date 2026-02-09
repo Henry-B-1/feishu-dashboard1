@@ -2,6 +2,8 @@
 import Link from 'next/link';
 import "./globals.css";
 import { usePathname } from 'next/navigation';
+// 🔥 修复：导入React的MouseEvent类型（关键）
+import type { MouseEvent, CSSProperties } from 'react';
 
 // 定义全局样式常量
 const STYLE_CONST = {
@@ -63,6 +65,7 @@ export default function MainLayout({
   const pathname = usePathname();
   console.log('当前路由：', pathname);
 
+  // 🔥 修复：使用React的MouseEvent类型，正确指定泛型
   // 锚点平滑跳转方法
   const handleAnchorClick = (e: MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
@@ -77,11 +80,12 @@ export default function MainLayout({
     }
   };
 
+  // 🔥 优化：为样式对象添加明确的类型标注
   // 通用导航项样式处理函数
-  const getNavItemStyle = (path: string, isChild = false) => {
+  const getNavItemStyle = (path: string, isChild = false): CSSProperties => {
     const isActive = pathname === path;
     // 激活项专属样式
-    const activeStyle = {
+    const activeStyle: CSSProperties = {
       color: STYLE_CONST.colors.primaryText,
       backgroundColor: STYLE_CONST.colors.primaryBg,
       fontWeight: 500,
@@ -89,7 +93,7 @@ export default function MainLayout({
       borderLeft: isChild ? 'none' : `2px solid ${STYLE_CONST.colors.primaryLight}`
     };
     // 基础样式
-    const baseStyle = {
+    const baseStyle: CSSProperties = {
       paddingLeft: isChild ? '40px' : '24px',
       paddingTop: isChild ? '8px' : '12px',
       paddingBottom: isChild ? '8px' : '12px',
@@ -109,8 +113,9 @@ export default function MainLayout({
     return isActive ? { ...baseStyle, ...activeStyle } : baseStyle;
   };
 
+  // 🔥 优化：为样式对象添加明确的类型标注
   // 通用分组标题样式
-  const getSectionTitleStyle = () => ({
+  const getSectionTitleStyle = (): CSSProperties => ({
     padding: `${STYLE_CONST.spacing.md} ${STYLE_CONST.spacing.xl}`,
     fontSize: STYLE_CONST.font.sectionTitle,
     color: STYLE_CONST.colors.text.secondary,
@@ -123,8 +128,9 @@ export default function MainLayout({
     margin: 0
   });
 
+  // 🔥 修复：使用React的MouseEvent类型
   // 导航项hover处理函数（统一逻辑）
-  const handleNavItemHover = (e: React.MouseEvent<HTMLDivElement>, path: string, isChild = false) => {
+  const handleNavItemHover = (e: MouseEvent<HTMLDivElement>, path: string, isChild = false) => {
     const isActive = pathname === path;
     if (isActive) {
       e.currentTarget.style.backgroundColor = STYLE_CONST.colors.primaryBg;
@@ -135,8 +141,9 @@ export default function MainLayout({
     }
   };
 
+  // 🔥 修复：使用React的MouseEvent类型
   // 导航项mouseLeave处理函数（统一逻辑）
-  const handleNavItemLeave = (e: React.MouseEvent<HTMLDivElement>, path: string, isChild = false) => {
+  const handleNavItemLeave = (e: MouseEvent<HTMLDivElement>, path: string, isChild = false) => {
     const isActive = pathname === path;
     if (isActive) {
       e.currentTarget.style.backgroundColor = STYLE_CONST.colors.primaryBg;
@@ -154,7 +161,7 @@ export default function MainLayout({
       padding: STYLE_CONST.spacing.lg,
       boxSizing: 'border-box',
       fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
-    }}>
+    } as CSSProperties}>
 
       {/* 头部区域 */}
       <div className="header-left" style={{
@@ -169,7 +176,7 @@ export default function MainLayout({
         boxShadow: STYLE_CONST.shadow.normal,
         marginBottom: STYLE_CONST.spacing.xl,
         transition: STYLE_CONST.transition
-      }}
+      } as CSSProperties}
         onMouseEnter={(e) => {
           e.currentTarget.style.boxShadow = STYLE_CONST.shadow.hover;
           e.currentTarget.style.borderColor = STYLE_CONST.colors.border.light;
@@ -187,11 +194,11 @@ export default function MainLayout({
           display: 'flex',
           alignItems: 'center',
           gap: STYLE_CONST.spacing.sm
-        }}>
+        } as CSSProperties}>
 
           迪敏思KPI dashboard
         </h1>
-        <div style={{ width: '80px' }}></div>
+        <div style={{ width: '80px' } as CSSProperties}></div>
       </div>
 
       {/* 主体容器 */}
@@ -200,7 +207,7 @@ export default function MainLayout({
         gap: STYLE_CONST.spacing.xl,
         height: 'calc(100vh - 140px)',
         boxSizing: 'border-box'
-      }}>
+      } as CSSProperties}>
 
         {/* 侧边栏 */}
         <div className="sidebar" style={{
@@ -213,7 +220,7 @@ export default function MainLayout({
           padding: `${STYLE_CONST.spacing.sm} 0`,
           transition: STYLE_CONST.transition,
           overflowY: 'auto'
-        }}
+        } as CSSProperties}
           onMouseEnter={(e) => {
             e.currentTarget.style.boxShadow = STYLE_CONST.shadow.hover;
             e.currentTarget.style.borderColor = STYLE_CONST.colors.border.light;
@@ -226,10 +233,10 @@ export default function MainLayout({
           {/* 本月总结 - 新增顶部外边距增大与上方间距，保留和全平台数据的近间距 */}
           <div
             className="nav-item"
-            style={{...getNavItemStyle('/summary'), marginBottom: 0, marginTop: STYLE_CONST.spacing.lg}}
+            style={{...getNavItemStyle('/summary'), marginBottom: 0, marginTop: STYLE_CONST.spacing.lg} as CSSProperties}
             onMouseEnter={(e) => handleNavItemHover(e, '/summary')}
             onMouseLeave={(e) => handleNavItemLeave(e, '/summary')}>
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
               <li>
                 <Link
                   href="/summary"
@@ -240,7 +247,7 @@ export default function MainLayout({
                     display: 'block',
                     width: '100%',
                     height: '100%'
-                  }}>
+                  } as CSSProperties}>
                   本月总结
                 </Link>
               </li>
@@ -248,7 +255,7 @@ export default function MainLayout({
           </div>
 
           {/* 全平台数据 - 保持和本月总结的近间距，无改动 */}
-          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.xs} 0 ${STYLE_CONST.spacing.lg} 0` }}>
+          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.xs} 0 ${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>全平台数据</h3>
             {/* 重点分子式声量&互动量 */}
             <div
@@ -256,7 +263,7 @@ export default function MainLayout({
               style={getNavItemStyle('/all-platform/molecule', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/all-platform/molecule', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/all-platform/molecule', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/all-platform/molecule"
@@ -267,7 +274,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点分子式声量&互动量
                   </Link>
                 </li>
@@ -279,7 +286,7 @@ export default function MainLayout({
               style={getNavItemStyle('/all-platform/brand', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/all-platform/brand', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/all-platform/brand', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/all-platform/brand"
@@ -290,7 +297,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点品牌声量&互动量
                   </Link>
                 </li>
@@ -299,14 +306,14 @@ export default function MainLayout({
           </div>
 
           {/* 抖音平台 - 保持原有默认大间距，无改动 */}
-          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` }}>
+          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>抖音平台</h3>
             <div
               className="nav-item"
               style={getNavItemStyle('/douyin-platform/molecule', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/douyin-platform/molecule', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/douyin-platform/molecule', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/douyin-platform/molecule"
@@ -317,7 +324,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点分子式声量&互动量
                   </Link>
                 </li>
@@ -328,7 +335,7 @@ export default function MainLayout({
               style={getNavItemStyle('/douyin-platform/brand', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/douyin-platform/brand', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/douyin-platform/brand', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/douyin-platform/brand"
@@ -339,7 +346,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点品牌声量&互动量
                   </Link>
                 </li>
@@ -350,7 +357,7 @@ export default function MainLayout({
               style={getNavItemStyle('/douyin-platform/kol', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/douyin-platform/kol', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/douyin-platform/kol', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/douyin-platform/kol"
@@ -361,7 +368,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     分子式KOL投放矩阵
                   </Link>
                 </li>
@@ -372,7 +379,7 @@ export default function MainLayout({
               style={getNavItemStyle('/douyin-platform/top', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/douyin-platform/top', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/douyin-platform/top', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/douyin-platform/top"
@@ -383,7 +390,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点分子式TOP热帖
                   </Link>
                 </li>
@@ -394,7 +401,7 @@ export default function MainLayout({
               style={getNavItemStyle('/douyin-platform/comment', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/douyin-platform/comment', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/douyin-platform/comment', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/douyin-platform/comment"
@@ -405,7 +412,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     KOL发帖评论区分析
                   </Link>
                 </li>
@@ -414,14 +421,14 @@ export default function MainLayout({
           </div>
 
           {/* 小红书平台 - 保持原有默认大间距，无改动 */}
-          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` }}>
+          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>小红书平台</h3>
             <div
               className="nav-item"
               style={getNavItemStyle('/xhs-platform/molecule', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/xhs-platform/molecule', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/xhs-platform/molecule', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/xhs-platform/molecule"
@@ -432,7 +439,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点分子式声量&互动量
                   </Link>
                 </li>
@@ -443,7 +450,7 @@ export default function MainLayout({
               style={getNavItemStyle('/xhs-platform/brand', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/xhs-platform/brand', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/xhs-platform/brand', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/xhs-platform/brand"
@@ -454,7 +461,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点品牌声量&互动量
                   </Link>
                 </li>
@@ -465,7 +472,7 @@ export default function MainLayout({
               style={getNavItemStyle('/xhs-platform/kol', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/xhs-platform/kol', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/xhs-platform/kol', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/xhs-platform/kol"
@@ -476,7 +483,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     分子式KOL投放矩阵
                   </Link>
                 </li>
@@ -487,7 +494,7 @@ export default function MainLayout({
               style={getNavItemStyle('/xhs-platform/top', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/xhs-platform/top', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/xhs-platform/top', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/xhs-platform/top"
@@ -498,7 +505,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     重点分子式TOP热帖
                   </Link>
                 </li>
@@ -509,7 +516,7 @@ export default function MainLayout({
               style={getNavItemStyle('/xhs-platform/comment', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/xhs-platform/comment', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/xhs-platform/comment', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/xhs-platform/comment"
@@ -520,7 +527,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     KOL发帖评论区分析
                   </Link>
                 </li>
@@ -529,14 +536,14 @@ export default function MainLayout({
           </div>
 
           {/* 覆盖范围和定义 - 保持原有默认大间距，无改动 */}
-          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` }}>
+          <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>覆盖范围和定义</h3>
             <div
               className="nav-item"
               style={getNavItemStyle('/definition', true)}
               onMouseEnter={(e) => handleNavItemHover(e, '/definition', true)}
               onMouseLeave={(e) => handleNavItemLeave(e, '/definition', true)}>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' } as CSSProperties}>
                 <li>
                   <Link
                     href="/definition"
@@ -547,7 +554,7 @@ export default function MainLayout({
                       display: 'block',
                       width: '100%',
                       height: '100%'
-                    }}>
+                    } as CSSProperties}>
                     覆盖范围和定义
                   </Link>
                 </li>
@@ -567,7 +574,7 @@ export default function MainLayout({
           padding: STYLE_CONST.spacing.xl,
           overflowY: 'auto',
           transition: STYLE_CONST.transition
-        }}
+        } as CSSProperties}
           onMouseEnter={(e) => {
             e.currentTarget.style.boxShadow = STYLE_CONST.shadow.hover;
             e.currentTarget.style.borderColor = STYLE_CONST.colors.border.light;

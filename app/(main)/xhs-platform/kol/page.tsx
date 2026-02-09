@@ -294,9 +294,14 @@ const formatTrend = (item: string | { value: number; trend: 'up' | 'down' }) => 
   );
 };
 
+// 🔥 修复：先判断类型再比较值，避免数字和字符串的无效比较
 // 格式化数字（千分位）
 const formatNumber = (num: string | number) => {
-  if (typeof num === 'string' || num === '-') return num;
+  // 第一步：如果是字符串类型，直接判断是否为 '-'
+  if (typeof num === 'string') {
+    return num;
+  }
+  // 第二步：如果是数字类型，进行千分位格式化
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 };
 

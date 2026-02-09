@@ -2,46 +2,85 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 
-// SVG图标组件
-const SearchIcon = ({ size = 18, color = "#64748B" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+// ========== 类型定义 ==========
+// 接口返回数据类型
+interface RawDataItem {
+  fields: {
+    标题?: string;
+    分子式?: string;
+    品牌?: string;
+    url?: string | { link: string; text: string };
+    作者?: string;
+    达人量级?: string;
+    互动量?: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
+// 格式化后的帖子数据类型
+interface FormattedPost {
+  分子式: string;
+  品牌: string;
+  标题文本: string;
+  标题链接: string;
+  作者: string;
+  达人量级: string;
+  互动量: number;
+}
+
+// SVG图标组件Props类型
+interface IconProps {
+  size?: number;
+  color?: string;
+  style?: React.CSSProperties;
+}
+
+// ErrorTip组件Props类型
+interface ErrorTipProps {
+  text: string;
+}
+
+// ========== SVG图标组件 ==========
+const SearchIcon = ({ size = 18, color = "#64748B", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
     <path d="M11 19C15.4183 19 19 15.4183 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19Z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     <path d="M21 21L16.65 16.65" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const FilterIcon = ({ size = 18, color = "#64748B" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const FilterIcon = ({ size = 18, color = "#64748B", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
     <path d="M12 20V4M6 20V10M18 20V10" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const ArrowDownIcon = ({ size = 16, color = "#2D5AF1" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const ArrowDownIcon = ({ size = 16, color = "#2D5AF1", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
     <path d="M6 9L12 15L18 9" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const ArrowUpIcon = ({ size = 16, color = "#64748B" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const ArrowUpIcon = ({ size = 16, color = "#64748B", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
     <path d="M18 15L12 9L6 15" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const MessageSquareIcon = ({ size = 16, color = "#2D5AF1" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const MessageSquareIcon = ({ size = 16, color = "#2D5AF1", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const UserIcon = ({ size = 16, color = "#64748B" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const UserIcon = ({ size = 16, color = "#64748B", style }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     <circle cx="12" cy="7" r="4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-// 加载动画组件
+// ========== 加载动画组件 ==========
 const LoadingSkeleton = () => (
   <div style={{
     gridColumn: '1/-1',
@@ -53,7 +92,7 @@ const LoadingSkeleton = () => (
     background: '#FFF',
     border: '1px solid #E2E8F0',
     borderRadius: '12px'
-  }}>
+  } as React.CSSProperties}>
     <div style={{
       width: '40px',
       height: '40px',
@@ -61,13 +100,13 @@ const LoadingSkeleton = () => (
       borderTop: '3px solid #2D5AF1',
       borderRadius: '50%',
       animation: 'spin 1s linear infinite'
-    }}></div>
+    } as React.CSSProperties}></div>
     <span style={{
       marginTop: '16px',
       fontSize: '14px',
       color: '#64748B',
       fontWeight: 500
-    }}>数据加载中...</span>
+    } as React.CSSProperties}>数据加载中...</span>
     <style jsx global>{`
       @keyframes spin {
         0% { transform: rotate(0deg); }
@@ -77,8 +116,8 @@ const LoadingSkeleton = () => (
   </div>
 );
 
-// 错误提示组件
-const ErrorTip = ({ text }) => (
+// ========== 错误提示组件 ==========
+const ErrorTip = ({ text }: ErrorTipProps) => (
   <div style={{
     gridColumn: '1/-1',
     display: 'flex',
@@ -89,7 +128,7 @@ const ErrorTip = ({ text }) => (
     background: '#FFF',
     border: '1px solid #E2E8F0',
     borderRadius: '12px'
-  }}>
+  } as React.CSSProperties}>
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M12 8V12" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -100,20 +139,21 @@ const ErrorTip = ({ text }) => (
       fontSize: '14px',
       color: '#ef4444',
       fontWeight: 500
-    }}>
+    } as React.CSSProperties}>
       {text}
     </p>
   </div>
 );
 
+// ========== 页面主组件 ==========
 export default function DouyinTopPostsPage() {
   // 状态管理
-  const [rawData, setRawData] = useState([]); // 接口原始数据
-  const [loading, setLoading] = useState(true); // 加载状态
-  const [error, setError] = useState(''); // 错误状态
-  const [searchKey, setSearchKey] = useState(''); // 搜索关键词
-  const [filterMolecule, setFilterMolecule] = useState('全部'); // 分子式筛选
-  const [sortType, setSortType] = useState('desc'); // 排序类型
+  const [rawData, setRawData] = useState<RawDataItem[]>([]); // 接口原始数据
+  const [loading, setLoading] = useState<boolean>(true); // 加载状态
+  const [error, setError] = useState<string>(''); // 错误状态
+  const [searchKey, setSearchKey] = useState<string>(''); // 搜索关键词
+  const [filterMolecule, setFilterMolecule] = useState<string>('全部'); // 分子式筛选
+  const [sortType, setSortType] = useState<'desc' | 'asc'>('desc'); // 排序类型
 
   // 从接口获取数据
   useEffect(() => {
@@ -123,7 +163,7 @@ export default function DouyinTopPostsPage() {
         const res = await axios.get('http://localhost:3000/api/feishu/XHS');
 
         // 核心筛选：只保留标题为「重点分子式TOP热帖（抖音）」的数据
-        const filteredByTitle = res.data.filter(item =>
+        const filteredByTitle = res.data.filter((item: RawDataItem) =>
           item.fields?.['标题'] === '重点分子式TOP热帖（红书）'
         );
 
@@ -142,7 +182,7 @@ export default function DouyinTopPostsPage() {
   }, []);
 
   // 处理数据映射（标准化接口字段 → 页面展示字段）
-  const formattedPosts = useMemo(() => {
+  const formattedPosts = useMemo<FormattedPost[]>(() => {
     return rawData.map(item => {
       const fields = item.fields || {};
 
@@ -151,16 +191,29 @@ export default function DouyinTopPostsPage() {
         ? Number(fields['互动量'].replace(/,/g, ''))
         : 0;
 
+      // 🔥 修复：显式初始化并添加类型保护，避免空对象导致的类型错误
+      let postLink = '';
+      let postText = '';
+
       // 处理URL字段（兼容对象格式 {link, text} 和普通字符串）
-      const urlObj = fields['url'] || {};
-      const postLink = typeof urlObj === 'object' ? urlObj.link : urlObj;
-      const postText = typeof urlObj === 'object' ? urlObj.text : urlObj;
+      if (fields['url']) {
+        const urlValue = fields['url'];
+        // 类型保护：判断是否为对象且包含link/text属性
+        if (typeof urlValue === 'object' && urlValue !== null && 'link' in urlValue && 'text' in urlValue) {
+          postLink = urlValue.link || '';
+          postText = urlValue.text || '';
+        } else if (typeof urlValue === 'string') {
+          // 如果是纯字符串，既作为链接也作为文本（兜底处理）
+          postLink = urlValue;
+          postText = urlValue;
+        }
+      }
 
       return {
         分子式: fields['分子式'] || '', // 接口中的分子式字段
         品牌: fields['品牌'] || '无品牌', // 接口中的品牌字段
-        标题文本: postText || '', // 帖子标题文本
-        标题链接: postLink || '', // 帖子跳转链接
+        标题文本: postText, // 确保是字符串类型
+        标题链接: postLink, // 确保是字符串类型
         作者: fields['作者'] || '未知作者', // 接口中的作者字段
         达人量级: fields['达人量级'] || '未知量级', // 接口中的达人量级字段
         互动量: interactionCount // 处理后的互动量数字
@@ -168,8 +221,17 @@ export default function DouyinTopPostsPage() {
     });
   }, [rawData]);
 
+  // 🔥 修复：补全moleculeOptions变量定义
+  // 动态生成分子式筛选选项（从接口数据中提取，自动更新）
+  const moleculeOptions = useMemo<string[]>(() => {
+    // 从筛选后的有效数据中提取唯一的分子式
+    const uniqueMolecules = [...new Set(formattedPosts.map(item => item.分子式))].filter(Boolean);
+    // 始终以"全部"开头，后续跟随接口中的所有分子式
+    return ['全部', ...uniqueMolecules];
+  }, [formattedPosts]); // 依赖formattedPosts，数据更新时自动重新生成
+
   // 二次筛选+排序（搜索+分子式+互动量）
-  const filteredPosts = useMemo(() => {
+  const filteredPosts = useMemo<FormattedPost[]>(() => {
     let result = [...formattedPosts];
 
     // 关键词搜索（标题文本/作者）
@@ -190,17 +252,9 @@ export default function DouyinTopPostsPage() {
     return result;
   }, [formattedPosts, searchKey, filterMolecule, sortType]);
 
-  // 动态生成分子式筛选选项（从接口数据中提取，自动更新）
-  const moleculeOptions = useMemo(() => {
-    // 从筛选后的有效数据中提取唯一的分子式
-    const uniqueMolecules = [...new Set(formattedPosts.map(item => item.分子式))].filter(Boolean);
-    // 始终以"全部"开头，后续跟随接口中的所有分子式
-    return ['全部', ...uniqueMolecules];
-  }, [formattedPosts]); // 依赖formattedPosts，数据更新时自动重新生成
-
   // 达人量级标签样式
-  const getLevelTagStyle = (level) => {
-    const styles = {
+  const getLevelTagStyle = (level: string) => {
+    const styles: Record<string, { bg: string; color: string }> = {
       '超头部': { bg: '#2D5AF1', color: '#FFF' },
       '头部': { bg: '#EBF0FF', color: '#2D5AF1' },
       '腰部': { bg: '#F8F9FA', color: '#495057' },
@@ -219,7 +273,7 @@ export default function DouyinTopPostsPage() {
       boxSizing: 'border-box',
       background: '#F8FAFC',
       fontFamily: 'Inter, system-ui, sans-serif'
-    }}>
+    } as React.CSSProperties}>
       {/* 页面标题栏 */}
       <div style={{
         display: 'flex',
@@ -231,7 +285,7 @@ export default function DouyinTopPostsPage() {
         border: '1px solid #E2E8F0',
         borderRadius: '12px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
-      }}>
+      } as React.CSSProperties}>
         <h2 style={{
           margin: 0,
           fontSize: '20px',
@@ -240,7 +294,7 @@ export default function DouyinTopPostsPage() {
           display: 'flex',
           alignItems: 'center',
           gap: '8px'
-        }}>
+        } as React.CSSProperties}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M19 6.41L17.59 5L7 15.59V9H5V19H15V17H8.41L19 6.41Z" fill="#2D5AF1"/>
           </svg>
@@ -252,15 +306,14 @@ export default function DouyinTopPostsPage() {
           display: 'flex',
           alignItems: 'center',
           gap: '4px'
-        }}>
-
+        } as React.CSSProperties}>
           <span style={{
             padding: '2px 6px',
             background: '#EBF0FF',
             color: '#2D5AF1',
             borderRadius: '4px',
             fontSize: '12px'
-          }}>
+          } as React.CSSProperties}>
             {filteredPosts.length}条
           </span>
         </div>
@@ -272,7 +325,7 @@ export default function DouyinTopPostsPage() {
         flexWrap: 'wrap',
         gap: '16px',
         marginBottom: '24px'
-      }}>
+      } as React.CSSProperties}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -283,7 +336,7 @@ export default function DouyinTopPostsPage() {
           borderRadius: '8px',
           padding: '0 12px',
           boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-        }}>
+        } as React.CSSProperties}>
           <SearchIcon size={18} color="#64748B" style={{ marginRight: '8px' }} />
           <input
             type="text"
@@ -296,7 +349,7 @@ export default function DouyinTopPostsPage() {
               padding: '12px 0',
               fontSize: '14px',
               outline: 'none'
-            }}
+            } as React.CSSProperties}
           />
         </div>
 
@@ -305,7 +358,7 @@ export default function DouyinTopPostsPage() {
           alignItems: 'center',
           flex: '1 1 200px',
           maxWidth: '240px'
-        }}>
+        } as React.CSSProperties}>
           <FilterIcon size={18} color="#64748B" style={{ marginRight: '8px' }} />
           <select
             value={filterMolecule}
@@ -325,11 +378,11 @@ export default function DouyinTopPostsPage() {
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'right 12px center',
               backgroundSize: '14px'
-            }}
+            } as React.CSSProperties}
           >
             {/* 动态渲染分子式选项，接口更新时自动同步 */}
             {moleculeOptions.map((item) => (
-              <option key={item} value={item} style={{ padding: '8px' }}>
+              <option key={item} value={item} style={{ padding: '8px' } as React.CSSProperties}>
                 {item}
               </option>
             ))}
@@ -351,7 +404,7 @@ export default function DouyinTopPostsPage() {
             cursor: 'pointer',
             boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
             transition: 'all 0.2s ease'
-          }}
+          } as React.CSSProperties}
           onMouseEnter={(e) => e.currentTarget.style.background = '#F8F9FA'}
           onMouseLeave={(e) => e.currentTarget.style.background = '#FFF'}
         >
@@ -369,7 +422,7 @@ export default function DouyinTopPostsPage() {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
         gap: '20px'
-      }}>
+      } as React.CSSProperties}>
         {loading ? (
           <LoadingSkeleton />
         ) : error ? (
@@ -387,7 +440,7 @@ export default function DouyinTopPostsPage() {
                   padding: '20px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
                   transition: 'all 0.2s ease'
-                }}
+                } as React.CSSProperties}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
                   e.currentTarget.style.transform = 'translateY(-2px)';
@@ -402,11 +455,11 @@ export default function DouyinTopPostsPage() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   marginBottom: '12px'
-                }}>
+                } as React.CSSProperties}>
                   <div style={{
                     display: 'flex',
                     gap: '8px'
-                  }}>
+                  } as React.CSSProperties}>
                     <span style={{
                       padding: '4px 8px',
                       background: '#EBF0FF',
@@ -414,7 +467,7 @@ export default function DouyinTopPostsPage() {
                       fontSize: '12px',
                       borderRadius: '6px',
                       fontWeight: 500
-                    }}>
+                    } as React.CSSProperties}>
                       {post.分子式}
                     </span>
                     <span style={{
@@ -424,7 +477,7 @@ export default function DouyinTopPostsPage() {
                       fontSize: '12px',
                       borderRadius: '6px',
                       fontWeight: 500
-                    }}>
+                    } as React.CSSProperties}>
                       {post.品牌}
                     </span>
                   </div>
@@ -434,7 +487,7 @@ export default function DouyinTopPostsPage() {
                     fontSize: '12px',
                     borderRadius: '6px',
                     fontWeight: 500
-                  }}>
+                  } as React.CSSProperties}>
                     {post.达人量级}
                   </span>
                 </div>
@@ -447,7 +500,7 @@ export default function DouyinTopPostsPage() {
                   style={{
                     textDecoration: 'none',
                     display: 'block'
-                  }}
+                  } as React.CSSProperties}
                 >
                   <h3 style={{
                     margin: '0 0 16px 0',
@@ -460,7 +513,7 @@ export default function DouyinTopPostsPage() {
                     WebkitBoxOrient: 'vertical',
                     overflow: 'hidden',
                     transition: 'color 0.2s ease'
-                  }}
+                  } as React.CSSProperties}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = '#2D5AF1';
                   }}
@@ -479,12 +532,12 @@ export default function DouyinTopPostsPage() {
                   marginTop: '16px',
                   paddingTop: '16px',
                   borderTop: '1px solid #F1F5F9'
-                }}>
+                } as React.CSSProperties}>
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px'
-                  }}>
+                  } as React.CSSProperties}>
                     <UserIcon size={16} color="#64748B" />
                     <span style={{
                       fontSize: '14px',
@@ -493,7 +546,7 @@ export default function DouyinTopPostsPage() {
                       maxWidth: '180px',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis'
-                    }}>
+                    } as React.CSSProperties}>
                       {post.作者}
                     </span>
                   </div>
@@ -504,7 +557,7 @@ export default function DouyinTopPostsPage() {
                     fontSize: '14px',
                     color: '#2D5AF1',
                     fontWeight: 500
-                  }}>
+                  } as React.CSSProperties}>
                     <MessageSquareIcon size={16} color="#2D5AF1" />
                     {post.互动量.toLocaleString()}
                   </div>
@@ -523,7 +576,7 @@ export default function DouyinTopPostsPage() {
             background: '#FFF',
             border: '1px dashed #E2E8F0',
             borderRadius: '12px'
-          }}>
+          } as React.CSSProperties}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M8 12L12 16L16 12" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -533,7 +586,7 @@ export default function DouyinTopPostsPage() {
               marginTop: '16px',
               fontSize: '14px',
               color: '#64748B'
-            }}>
+            } as React.CSSProperties}>
               未找到匹配的热帖数据
             </p>
           </div>

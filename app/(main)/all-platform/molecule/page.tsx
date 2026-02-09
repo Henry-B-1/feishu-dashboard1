@@ -5,19 +5,31 @@ import axios from 'axios';
 import styles from './page.module.css';
 
 export default function SOVSOEPieChartPage() {
-  const [rawData, setRawData] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState('Aug-25');
-  const [loading, setLoading] = useState(true);
-  const [sovPieData, setSovPieData] = useState([]);
-  const [soePieData, setSoePieData] = useState([]);
-  const [barData, setBarData] = useState({ brands: [], totalVoice: [], totalInteract: [] });
-  const sovChartRef = useRef(null);
-  const soeChartRef = useRef(null);
-  const voiceBarChartRef = useRef(null);
-  const interactBarChartRef = useRef(null);
+  // TS泛型类型约束
+  const [rawData, setRawData] = useState<Array<{ fields: Record<string, any> }>>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>('Aug-25');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [sovPieData, setSovPieData] = useState<Array<{ name: string; value: number }>>([]);
+  const [soePieData, setSoePieData] = useState<Array<{ name: string; value: number }>>([]);
+  const [barData, setBarData] = useState<{
+    brands: string[];
+    totalVoice: number[];
+    totalInteract: number[];
+  }>({ brands: [], totalVoice: [], totalInteract: [] });
 
-  // 全局统一样式配置
-  const CHART_STYLE_CONFIG = {
+  // 🔥 核心修复：使用 any 类型绕过 echarts-for-react 有问题的类型定义
+  // 这是解决 ref 类型不匹配的终极方案，不影响功能且能通过编译
+  const sovChartRef = useRef<any>(null);
+  const soeChartRef = useRef<any>(null);
+  const voiceBarChartRef = useRef<any>(null);
+  const interactBarChartRef = useRef<any>(null);
+
+  // 全局样式配置 + CSSProperties类型约束，解决boxSizing类型报错
+  const CHART_STYLE_CONFIG: {
+    container: React.CSSProperties;
+    style: React.CSSProperties;
+    parent: React.CSSProperties;
+  } = {
     container: {
       width: '48%',
       minWidth: '400px',
@@ -40,7 +52,7 @@ export default function SOVSOEPieChartPage() {
       alignItems: 'stretch',
       justifyContent: 'center',
       margin: '16px 0',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
     }
   };
 
@@ -66,46 +78,44 @@ export default function SOVSOEPieChartPage() {
     fetchData();
   }, []);
 
-  // ========== 核心修改：过滤逻辑调整为「分子式」相关 ==========
-  // 格式化饼图数据（重点：标题改为「重点分子式声量及互动量表现」，过滤条件改为「分子式」）
-  const formatPieData = (indicatorType) => {
+  // 格式化饼图数据（分子式版本）
+  const formatPieData = (indicatorType: string) => {
     if (rawData.length === 0) return [];
     const filteredData = rawData.filter(item => {
       const fields = item.fields;
       return (
-        fields?.['标题'] === '重点分子式声量及互动量表现' && // 标题改为分子式相关
+        fields?.['标题'] === '重点分子式声量及互动量表现' &&
         fields?.['拆分方式'] === '全量数据' &&
         fields?.['分析指标'] === indicatorType &&
         fields?.['日期'] === selectedMonth &&
-        !!fields?.['分子式'] // 过滤条件改为「有分子式」
+        !!fields?.['分子式']
       );
     });
     return filteredData.map(item => {
       const value = item.fields?.['值'] || '0%';
       return {
-        name: item.fields['分子式'], // 显示名称改为分子式
-        value: Number(value.replace('%', ''))
+        name: item.fields['分子式'] || '',
+        value: Number(value.replace('%', '')) || 0
       };
     });
   };
 
-  // 格式化拆分后的柱状图数据（同步调整为「分子式」）
+  // 格式化拆分后的柱状图数据（分子式版本）
   const formatSplitBarData = () => {
     if (rawData.length === 0) return { brands: [], totalVoice: [], totalInteract: [] };
     const baseFiltered = rawData.filter(item => {
       const fields = item.fields;
       return (
-        fields?.['标题'] === '重点分子式声量及互动量表现' && // 标题改为分子式相关
+        fields?.['标题'] === '重点分子式声量及互动量表现' &&
         fields?.['拆分方式'] === '全量数据' &&
         fields?.['日期'] === selectedMonth &&
-        !!fields?.['分子式'] && // 过滤条件改为「有分子式」
+        !!fields?.['分子式'] &&
         !!fields?.['值']
       );
     });
-    // 提取唯一的分子式列表（替代原品牌列表）
-    const brands = [...new Set(baseFiltered.map(item => item.fields['分子式']))].filter(Boolean);
-    const totalVoice = [];
-    const totalInteract = [];
+    const brands = [...new Set(baseFiltered.map(item => item.fields['分子式'] || ''))].filter(Boolean);
+    const totalVoice: number[] = [];
+    const totalInteract: number[] = [];
 
     brands.forEach(brand => {
       const voiceItem = baseFiltered.find(item =>
@@ -124,7 +134,6 @@ export default function SOVSOEPieChartPage() {
     return { brands, totalVoice, totalInteract };
   };
 
-
   const fullMonthList = [
     'Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25', 'Jun-25',
     'Jul-25', 'Aug-25', 'Sep-25', 'Oct-25', 'Nov-25', 'Dec-25'
@@ -132,15 +141,15 @@ export default function SOVSOEPieChartPage() {
   const monthSortMap = Object.fromEntries(fullMonthList.map((month, index) => [month, index + 1]));
   const allMonthOptions = fullMonthList.sort((a, b) => monthSortMap[a] - monthSortMap[b]);
 
-  // ECharts配置：饼图（保留样式，仅适配数据）
-  const getEchartsPieOption = (indicatorType, pieData) => {
+  // ECharts配置：饼图（分子式版本）
+  const getEchartsPieOption = (indicatorType: string, pieData: Array<{ name: string; value: number }>) => {
     const colorPalette = [
       '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
       '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#596164'
     ];
     return {
       title: {
-        text: `重点分子式${indicatorType}值分布（全量数据）`, // 标题改为分子式
+        text: `重点分子式${indicatorType}值分布（全量数据）`,
         left: 'center',
         top: 15,
         textStyle: {
@@ -199,11 +208,11 @@ export default function SOVSOEPieChartPage() {
     };
   };
 
-  // 通用柱状图配置（标题改为分子式）
-  const getEchartsSingleBarOption = (title, brands, values, color) => {
+  // 通用柱状图配置（分子式版本）
+  const getEchartsSingleBarOption = (title: string, brands: string[], values: number[], color: string) => {
     return {
       title: {
-        text: `重点分子式${title.replace('品牌', '')}分布（全量数据·${selectedMonth}）`, // 替换品牌为分子式
+        text: `重点分子式${title}分布（全量数据·${selectedMonth}）`,
         left: 'center',
         top: 15,
         textStyle: {
@@ -286,7 +295,7 @@ export default function SOVSOEPieChartPage() {
       },
       series: [
         {
-          name: title.replace('品牌', '分子式'), // 图例名称改为分子式
+          name: title,
           type: 'bar',
           data: values,
           barWidth: '45%',
@@ -326,48 +335,35 @@ export default function SOVSOEPieChartPage() {
     setBarData(formatSplitBarData());
   }, [rawData, selectedMonth]);
 
-  // 加载动画组件
-  const LoadingSkeleton = ({ text }) => (
+  // 加载动画组件（CSS Modules实现，无TS报错）
+  const LoadingSkeleton = ({ text }: { text: string }) => (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
       height: '100%',
-      gap: '12px'
+      gap: '12px' as const,
     }}>
-      <div style={{
-        width: '40px',
-        height: '40px',
-        border: '3px solid #e2e8f0',
-        borderTop: '3px solid #5470c6',
-        borderRadius: '50%',
-        animation: 'spin 1s linear infinite'
-      }}></div>
+      <div className={styles.spin}></div>
       <span style={{
         fontSize: 14,
         color: '#64748b',
-        fontWeight: 500
+        fontWeight: 500,
       }}>{text}</span>
-      <style jsx global>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 
-  // 空数据提示组件（适配分子式）
-  const EmptyDataTip = ({ text }) => (
+  // 空数据提示组件（分子式版本）
+  const EmptyDataTip = ({ text }: { text: string }) => (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
       height: '100%',
-      gap: '12px',
-      color: '#64748b'
+      gap: '12px' as const,
+      color: '#64748b',
     }}>
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -376,7 +372,7 @@ export default function SOVSOEPieChartPage() {
       </svg>
       <span style={{
         fontSize: 14,
-        fontWeight: 500
+        fontWeight: 500,
       }}>{text.replace('品牌', '分子式')}</span>
     </div>
   );
@@ -388,12 +384,11 @@ export default function SOVSOEPieChartPage() {
       padding: '24px',
       display: 'flex',
       flexDirection: 'column',
-      boxSizing: 'border-box',
+      boxSizing: 'border-box' as const,
       background: '#f8fafc',
-      fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
+      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
     }}>
-
-      {/* 页面标题 + 月份选择器 组合栏（标题改为分子式） */}
+      {/* 页面标题 + 月份选择器 组合栏（分子式版本） */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -404,7 +399,8 @@ export default function SOVSOEPieChartPage() {
         background: 'linear-gradient(135deg, #ffffff 0%, #fafafa 100%)',
         border: '1px solid #e2e8f0',
         borderRadius: '12px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+        boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+        boxSizing: 'border-box' as const,
       }}>
         <h2 style={{
           margin: 0,
@@ -413,25 +409,25 @@ export default function SOVSOEPieChartPage() {
           color: '#1e293b',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px'
+          gap: '8px' as const,
         }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M21 12V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V12" stroke="#5470c6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M23 10V6C23 5.46957 22.7893 4.96086 22.4142 4.58579C22.0391 4.21071 21.5304 4 21 4H16L12 1L8 4H3C2.46957 4 1.96086 4.21071 1.58579 4.58579C1.21071 4.96086 1 5.46957 1 6V10" stroke="#5470c6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          重点分子式声量及互动量分析 {/* 页面标题改为分子式 */}
+          重点分子式声量及互动量分析
         </h2>
 
         <div style={{
           display: 'flex',
-          gap: '12px',
-          alignItems: 'center'
+          gap: '12px' as const,
+          alignItems: 'center',
         }}>
           <span style={{
             fontSize: 14,
             fontWeight: 500,
             whiteSpace: 'nowrap',
-            color: '#475569'
+            color: '#475569',
           }}>选择月份：</span>
           <select
             value={selectedMonth}
@@ -454,15 +450,16 @@ export default function SOVSOEPieChartPage() {
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'right 12px center',
               backgroundSize: '14px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              boxSizing: 'border-box' as const,
             }}
             onMouseOver={(e) => {
-              e.target.style.borderColor = '#5470c6';
-              e.target.style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
+              e.currentTarget.style.borderColor = '#5470c6';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
             }}
             onMouseOut={(e) => {
-              e.target.style.borderColor = '#e2e8f0';
-              e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
+              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
             }}
           >
             {allMonthOptions.map(month => (
@@ -474,7 +471,7 @@ export default function SOVSOEPieChartPage() {
                   fontSize: 14,
                   color: '#1e293b',
                   backgroundColor: '#ffffff',
-                  fontWeight: 500
+                  fontWeight: 500,
                 }}
               >
                 {month}
@@ -558,7 +555,7 @@ export default function SOVSOEPieChartPage() {
             <ReactECharts
               ref={voiceBarChartRef}
               option={getEchartsSingleBarOption(
-                '重点品牌总声量',
+                '总声量',
                 barData.brands,
                 barData.totalVoice,
                 '#5470c6'
@@ -588,7 +585,7 @@ export default function SOVSOEPieChartPage() {
             <ReactECharts
               ref={interactBarChartRef}
               option={getEchartsSingleBarOption(
-                '重点品牌总互动量',
+                '总互动量',
                 barData.brands,
                 barData.totalInteract,
                 '#91cc75'

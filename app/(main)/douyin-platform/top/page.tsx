@@ -3,38 +3,38 @@ import React, { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 
 // SVG图标组件
-const SearchIcon = ({ size = 18, color = "#64748B" }) => (
+const SearchIcon = ({ size = 18, color = "#64748B" }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M11 19C15.4183 19 19 15.4183 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19Z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     <path d="M21 21L16.65 16.65" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const FilterIcon = ({ size = 18, color = "#64748B" }) => (
+const FilterIcon = ({ size = 18, color = "#64748B" }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 20V4M6 20V10M18 20V10" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const ArrowDownIcon = ({ size = 16, color = "#2D5AF1" }) => (
+const ArrowDownIcon = ({ size = 16, color = "#2D5AF1" }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M6 9L12 15L18 9" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const ArrowUpIcon = ({ size = 16, color = "#64748B" }) => (
+const ArrowUpIcon = ({ size = 16, color = "#64748B" }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M18 15L12 9L6 15" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const MessageSquareIcon = ({ size = 16, color = "#2D5AF1" }) => (
+const MessageSquareIcon = ({ size = 16, color = "#2D5AF1" }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
-const UserIcon = ({ size = 16, color = "#64748B" }) => (
+const UserIcon = ({ size = 16, color = "#64748B" }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     <circle cx="12" cy="7" r="4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -77,8 +77,9 @@ const LoadingSkeleton = () => (
   </div>
 );
 
+// 🔥 修复：为ErrorTip组件添加明确的类型定义
 // 错误提示组件
-const ErrorTip = ({ text }) => (
+const ErrorTip = ({ text }: { text: string }) => (
   <div style={{
     gridColumn: '1/-1',
     display: 'flex',
@@ -106,14 +107,25 @@ const ErrorTip = ({ text }) => (
   </div>
 );
 
+// 🔥 新增：定义帖子数据的类型接口，让整个组件类型更安全
+interface PostData {
+  分子式: string;
+  品牌: string;
+  标题文本: string;
+  标题链接: string;
+  作者: string;
+  达人量级: string;
+  互动量: number;
+}
+
 export default function DouyinTopPostsPage() {
-  // 状态管理
-  const [rawData, setRawData] = useState([]); // 接口原始数据
-  const [loading, setLoading] = useState(true); // 加载状态
-  const [error, setError] = useState(''); // 错误状态
-  const [searchKey, setSearchKey] = useState(''); // 搜索关键词
-  const [filterMolecule, setFilterMolecule] = useState('全部'); // 分子式筛选
-  const [sortType, setSortType] = useState('desc'); // 排序类型
+  // 状态管理（添加明确的类型标注）
+  const [rawData, setRawData] = useState<any[]>([]); // 接口原始数据
+  const [loading, setLoading] = useState<boolean>(true); // 加载状态
+  const [error, setError] = useState<string>(''); // 错误状态
+  const [searchKey, setSearchKey] = useState<string>(''); // 搜索关键词
+  const [filterMolecule, setFilterMolecule] = useState<string>('全部'); // 分子式筛选
+  const [sortType, setSortType] = useState<'desc' | 'asc'>('desc'); // 排序类型
 
   // 从接口获取数据
   useEffect(() => {
@@ -123,7 +135,7 @@ export default function DouyinTopPostsPage() {
         const res = await axios.get('http://localhost:3000/api/feishu/DOUYIN');
 
         // 核心筛选：只保留标题为「重点分子式TOP热帖（抖音）」的数据
-        const filteredByTitle = res.data.filter(item =>
+        const filteredByTitle = res.data.filter((item: any) =>
           item.fields?.['标题'] === '重点分子式TOP热帖（抖音）'
         );
 
@@ -142,8 +154,8 @@ export default function DouyinTopPostsPage() {
   }, []);
 
   // 处理数据映射（标准化接口字段 → 页面展示字段）
-  const formattedPosts = useMemo(() => {
-    return rawData.map(item => {
+  const formattedPosts = useMemo<PostData[]>(() => {
+    return rawData.map((item: any) => {
       const fields = item.fields || {};
 
       // 处理互动量格式：去除逗号并转为数字
@@ -169,7 +181,7 @@ export default function DouyinTopPostsPage() {
   }, [rawData]);
 
   // 二次筛选+排序（搜索+分子式+互动量）
-  const filteredPosts = useMemo(() => {
+  const filteredPosts = useMemo<PostData[]>(() => {
     let result = [...formattedPosts];
 
     // 关键词搜索（标题文本/作者）
@@ -191,7 +203,7 @@ export default function DouyinTopPostsPage() {
   }, [formattedPosts, searchKey, filterMolecule, sortType]);
 
   // 动态生成分子式筛选选项（从接口数据中提取，自动更新）
-  const moleculeOptions = useMemo(() => {
+  const moleculeOptions = useMemo<string[]>(() => {
     // 从筛选后的有效数据中提取唯一的分子式
     const uniqueMolecules = [...new Set(formattedPosts.map(item => item.分子式))].filter(Boolean);
     // 始终以"全部"开头，后续跟随接口中的所有分子式
@@ -199,8 +211,8 @@ export default function DouyinTopPostsPage() {
   }, [formattedPosts]); // 依赖formattedPosts，数据更新时自动重新生成
 
   // 达人量级标签样式
-  const getLevelTagStyle = (level) => {
-    const styles = {
+  const getLevelTagStyle = (level: string) => {
+    const styles: Record<string, { bg: string; color: string }> = {
       '超头部': { bg: '#2D5AF1', color: '#FFF' },
       '头部': { bg: '#EBF0FF', color: '#2D5AF1' },
       '腰部': { bg: '#F8F9FA', color: '#495057' },
@@ -253,7 +265,6 @@ export default function DouyinTopPostsPage() {
           alignItems: 'center',
           gap: '4px'
         }}>
-
           <span style={{
             padding: '2px 6px',
             background: '#EBF0FF',
@@ -284,7 +295,7 @@ export default function DouyinTopPostsPage() {
           padding: '0 12px',
           boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
         }}>
-          <SearchIcon size={18} color="#64748B" style={{ marginRight: '8px' }} />
+
           <input
             type="text"
             placeholder="搜索标题/作者..."
@@ -306,7 +317,7 @@ export default function DouyinTopPostsPage() {
           flex: '1 1 200px',
           maxWidth: '240px'
         }}>
-          <FilterIcon size={18} color="#64748B" style={{ marginRight: '8px' }} />
+
           <select
             value={filterMolecule}
             onChange={(e) => setFilterMolecule(e.target.value)}
