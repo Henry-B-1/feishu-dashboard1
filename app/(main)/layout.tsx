@@ -1,9 +1,10 @@
 'use client'
 import Link from 'next/link';
 import "./globals.css";
-import { usePathname } from 'next/navigation';
-// 🔥 修复：导入React的MouseEvent类型（关键）
-import type { MouseEvent, CSSProperties } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+
+import type { MouseEvent, CSSProperties} from 'react';
+import { useEffect } from 'react';
 
 // 定义全局样式常量
 const STYLE_CONST = {
@@ -64,6 +65,26 @@ export default function MainLayout({
 }) {
   const pathname = usePathname();
   console.log('当前路由：', pathname);
+
+
+  const router = useRouter();
+
+// 登录拦截：没 token 就去登录页
+useEffect(() => {
+  const token = localStorage.getItem('token');
+  // 排除登录页自己，不然会死循环
+  if (pathname !== '/login' && !token) {
+    router.push('/login');
+  }
+}, [pathname]);
+
+// 退出登录
+const logout = () => {
+  localStorage.removeItem('token');
+  router.push('/login');
+};
+
+
 
   // 🔥 修复：使用React的MouseEvent类型，正确指定泛型
   // 锚点平滑跳转方法
@@ -198,7 +219,20 @@ export default function MainLayout({
 
           迪敏思KPI dashboard
         </h1>
-        <div style={{ width: '80px' } as CSSProperties}></div>
+        <button
+          onClick={logout}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#2D5AF1',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+        >
+          退出登录
+        </button>
       </div>
 
       {/* 主体容器 */}
