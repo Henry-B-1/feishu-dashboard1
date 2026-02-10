@@ -7,7 +7,7 @@ export default function Home() {
 
   // 页面加载后立即跳转到登录页
   useEffect(() => {
-    router.push('/login');
+    router.push('/summary');
   }, [router]);
 
   return null; // 无需渲染内容，直接跳转
