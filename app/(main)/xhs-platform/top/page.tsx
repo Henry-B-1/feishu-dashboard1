@@ -1,25 +1,9 @@
 'use client'
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import axios from 'axios';
 
-// ========== 类型定义 ==========
-// 接口返回数据类型
-interface RawDataItem {
-  fields: {
-    标题?: string;
-    分子式?: string;
-    品牌?: string;
-    url?: string | { link: string; text: string };
-    作者?: string;
-    达人量级?: string;
-    互动量?: string;
-    [key: string]: any;
-  };
-  [key: string]: any;
-}
-
-// 格式化后的帖子数据类型
-interface FormattedPost {
+// 定义数据类型
+interface PostItem {
   分子式: string;
   品牌: string;
   标题文本: string;
@@ -29,231 +13,219 @@ interface FormattedPost {
   互动量: number;
 }
 
-// SVG图标组件Props类型
-interface IconProps {
-  size?: number;
-  color?: string;
-  style?: React.CSSProperties;
-}
+// 自定义下拉选择组件（核心，复用给分子式和达人量级筛选）
+const CustomDropdown = ({
+  value,
+  onChange,
+  options,
+  width = '300px'
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: { label: string; value: string }[];
+  width?: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-// ErrorTip组件Props类型
-interface ErrorTipProps {
-  text: string;
-}
-
-// ========== SVG图标组件 ==========
-const SearchIcon = ({ size = 18, color = "#64748B", style }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
-    <path d="M11 19C15.4183 19 19 15.4183 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19Z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M21 21L16.65 16.65" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const FilterIcon = ({ size = 18, color = "#64748B", style }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
-    <path d="M12 20V4M6 20V10M18 20V10" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const ArrowDownIcon = ({ size = 16, color = "#2D5AF1", style }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
-    <path d="M6 9L12 15L18 9" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const ArrowUpIcon = ({ size = 16, color = "#64748B", style }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
-    <path d="M18 15L12 9L6 15" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const MessageSquareIcon = ({ size = 16, color = "#2D5AF1", style }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const UserIcon = ({ size = 16, color = "#64748B", style }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={style}>
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <circle cx="12" cy="7" r="4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-// ========== 加载动画组件 ==========
-const LoadingSkeleton = () => (
-  <div style={{
-    gridColumn: '1/-1',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '48px',
-    background: '#FFF',
-    border: '1px solid #E2E8F0',
-    borderRadius: '12px'
-  } as React.CSSProperties}>
-    <div style={{
-      width: '40px',
-      height: '40px',
-      border: '3px solid #e2e8f0',
-      borderTop: '3px solid #2D5AF1',
-      borderRadius: '50%',
-      animation: 'spin 1s linear infinite'
-    } as React.CSSProperties}></div>
-    <span style={{
-      marginTop: '16px',
-      fontSize: '14px',
-      color: '#64748B',
-      fontWeight: 500
-    } as React.CSSProperties}>数据加载中...</span>
-    <style jsx global>{`
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+  // 点击外部关闭下拉
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
       }
-    `}</style>
-  </div>
-);
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
-// ========== 错误提示组件 ==========
-const ErrorTip = ({ text }: ErrorTipProps) => (
-  <div style={{
-    gridColumn: '1/-1',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '48px',
-    background: '#FFF',
-    border: '1px solid #E2E8F0',
-    borderRadius: '12px'
-  } as React.CSSProperties}>
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M12 8V12" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M12 16H12.01" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-    <p style={{
-      marginTop: '16px',
-      fontSize: '14px',
-      color: '#ef4444',
-      fontWeight: 500
-    } as React.CSSProperties}>
-      {text}
-    </p>
-  </div>
-);
+  // 获取选中项
+  const selected = options.find(opt => opt.value === value) || options[0];
 
-// ========== 页面主组件 ==========
-export default function DouyinTopPostsPage() {
-  // 状态管理
-  const [rawData, setRawData] = useState<RawDataItem[]>([]); // 接口原始数据
-  const [loading, setLoading] = useState<boolean>(true); // 加载状态
-  const [error, setError] = useState<string>(''); // 错误状态
-  const [searchKey, setSearchKey] = useState<string>(''); // 搜索关键词
-  const [filterMolecule, setFilterMolecule] = useState<string>('全部'); // 分子式筛选
-  const [sortType, setSortType] = useState<'desc' | 'asc'>('desc'); // 排序类型
+  return (
+    <div ref={ref} style={{ width, position: 'relative' }}>
+      {/* 下拉触发按钮 */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%',
+          padding: '12px 16px',
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          backgroundColor: 'white',
+          textAlign: 'left',
+          fontSize: '14px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          cursor: 'pointer'
+        }}
+      >
+        <span>{selected.label}</span>
+        <span style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: '0.2s' }}>▼</span>
+      </button>
 
-  // 从接口获取数据
+      {/* 下拉选项列表 */}
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          width: '100%',
+          marginTop: '4px',
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          backgroundColor: 'white',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          zIndex: 100
+        }}>
+          {options.map(opt => (
+            <div
+              key={opt.value}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              style={{
+                padding: '12px 16px',
+                fontSize: '14px',
+                backgroundColor: opt.value === value ? '#ebf0ff' : 'white',
+                color: opt.value === value ? '#2d5af1' : '#1e293b',
+                cursor: 'pointer'
+              }}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default function DouyinPosts() {
+  // 基础状态
+  const [data, setData] = useState<PostItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchText, setSearchText] = useState('');
+  const [selectedMolecule, setSelectedMolecule] = useState('全部');
+  const [selectedLevel, setSelectedLevel] = useState('全部');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
+  // 1. 获取并格式化数据
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
         const res = await axios.get('http://localhost:3000/api/feishu/XHS');
-
-        // 核心筛选：只保留标题为「重点分子式TOP热帖（抖音）」的数据
-        const filteredByTitle = res.data.filter((item: RawDataItem) =>
-          item.fields?.['标题'] === '重点分子式TOP热帖（红书）'
-        );
-
-        setRawData(filteredByTitle);
-        setError('');
+        // 筛选目标数据并格式化
+        const formatted = res.data
+          .filter((item: any) => item.fields?.['标题'] === '重点分子式TOP热帖（红书）')
+          .map((item: any) => {
+            const f = item.fields || {};
+            return {
+              分子式: f['分子式'] || '',
+              品牌: f['品牌'] || '无品牌',
+              标题文本: (f['url']?.text || f['url'] || ''),
+              标题链接: (f['url']?.link || f['url'] || ''),
+              作者: f['作者'] || '未知作者',
+              达人量级: f['达人量级'] || '未知量级',
+              互动量: Number((f['互动量'] || '0').replace(/,/g, ''))
+            };
+          });
+        setData(formatted);
       } catch (err) {
-        console.error('数据请求失败：', err);
-        setError('数据加载失败，请检查接口是否可用');
-        setRawData([]);
+        console.error('数据获取失败:', err);
+        setData([]);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
-  // 处理数据映射（标准化接口字段 → 页面展示字段）
-  const formattedPosts = useMemo<FormattedPost[]>(() => {
-    return rawData.map(item => {
-      const fields = item.fields || {};
-
-      // 处理互动量格式：去除逗号并转为数字
-      const interactionCount = fields['互动量']
-        ? Number(fields['互动量'].replace(/,/g, ''))
-        : 0;
-
-      // 🔥 修复：显式初始化并添加类型保护，避免空对象导致的类型错误
-      let postLink = '';
-      let postText = '';
-
-      // 处理URL字段（兼容对象格式 {link, text} 和普通字符串）
-      if (fields['url']) {
-        const urlValue = fields['url'];
-        // 类型保护：判断是否为对象且包含link/text属性
-        if (typeof urlValue === 'object' && urlValue !== null && 'link' in urlValue && 'text' in urlValue) {
-          postLink = urlValue.link || '';
-          postText = urlValue.text || '';
-        } else if (typeof urlValue === 'string') {
-          // 如果是纯字符串，既作为链接也作为文本（兜底处理）
-          postLink = urlValue;
-          postText = urlValue;
-        }
-      }
-
-      return {
-        分子式: fields['分子式'] || '', // 接口中的分子式字段
-        品牌: fields['品牌'] || '无品牌', // 接口中的品牌字段
-        标题文本: postText, // 确保是字符串类型
-        标题链接: postLink, // 确保是字符串类型
-        作者: fields['作者'] || '未知作者', // 接口中的作者字段
-        达人量级: fields['达人量级'] || '未知量级', // 接口中的达人量级字段
-        互动量: interactionCount // 处理后的互动量数字
-      };
+  // 2. 统计分子式数量（核心：确保数量计算准确）
+  const moleculeStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    // 统计每个分子式的数量（不受达人量级筛选影响）
+    data.forEach(item => {
+      const mol = item.分子式.trim();
+      if (mol) stats[mol] = (stats[mol] || 0) + 1;
     });
-  }, [rawData]);
+    return stats;
+  }, [data]);
 
-  // 🔥 修复：补全moleculeOptions变量定义
-  // 动态生成分子式筛选选项（从接口数据中提取，自动更新）
-  const moleculeOptions = useMemo<string[]>(() => {
-    // 从筛选后的有效数据中提取唯一的分子式
-    const uniqueMolecules = [...new Set(formattedPosts.map(item => item.分子式))].filter(Boolean);
-    // 始终以"全部"开头，后续跟随接口中的所有分子式
-    return ['全部', ...uniqueMolecules];
-  }, [formattedPosts]); // 依赖formattedPosts，数据更新时自动重新生成
+  // 新增：根据选中的分子式，筛选出对应的数据集（用于联动达人量级统计）
+  const moleculeFilteredData = useMemo(() => {
+    if (selectedMolecule === '全部') {
+      return data; // 未筛选分子式时，使用全部数据
+    }
+    return data.filter(item => item.分子式 === selectedMolecule); // 筛选分子式后，使用该分子式的所有数据
+  }, [data, selectedMolecule]); // 依赖选中的分子式，实时更新
 
-  // 二次筛选+排序（搜索+分子式+互动量）
-  const filteredPosts = useMemo<FormattedPost[]>(() => {
-    let result = [...formattedPosts];
+  // 修改：达人量级统计（依赖筛选后的分子式数据）
+  const levelStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    // 统计「当前分子式下」每个达人量级的数量
+    moleculeFilteredData.forEach(item => {
+      const level = item.达人量级.trim() || '未知量级';
+      stats[level] = (stats[level] || 0) + 1;
+    });
+    return stats;
+  }, [moleculeFilteredData]); // 依赖筛选后的数据集，实现联动
 
-    // 关键词搜索（标题文本/作者）
-    if (searchKey) {
+  // 3. 构建分子式下拉选项（强制显示数量）
+  const dropdownOptions = useMemo(() => {
+    const baseOptions = ['全部', ...Array.from(new Set(data.map(item => item.分子式.trim()).filter(Boolean)))];
+    return baseOptions.map(opt => ({
+      value: opt,
+      label: opt === '全部'
+        ? `全部 (${data.length}条)`
+        : `${opt} (${moleculeStats[opt] || 0}条)`
+    }));
+  }, [data, moleculeStats]);
+
+  // 修改：构建达人量级下拉选项（联动分子式筛选，显示当前分子式下的量级数量）
+  const levelOptions = useMemo(() => {
+    const levelPriority = ['超头部', '头部', '腰部', '肩部', '尾部', '未知量级'];
+    // 从「当前分子式下的数据集」中提取所有达人量级并去重
+    const allLevels = Array.from(new Set(moleculeFilteredData.map(item => item.达人量级.trim()).filter(Boolean)));
+    const sortedLevels = levelPriority.filter(level => allLevels.includes(level))
+      .concat(allLevels.filter(level => !levelPriority.includes(level)));
+
+    const baseOptions = ['全部', ...sortedLevels];
+    return baseOptions.map(opt => ({
+      value: opt,
+      label: opt === '全部'
+        ? `全部 (${moleculeFilteredData.length}条)` // 显示当前分子式下的总条数
+        : `${opt} (${levelStats[opt] || 0}条)` // 显示当前分子式下该量级的条数
+    }));
+  }, [moleculeFilteredData, levelStats]); // 依赖筛选后的数据集和统计结果
+
+  // 4. 筛选和排序数据
+  const filteredData = useMemo(() => {
+    let result = [...data];
+    // 关键词筛选
+    if (searchText) {
       result = result.filter(item =>
-        item.标题文本.includes(searchKey) || item.作者.includes(searchKey)
+        item.标题文本.includes(searchText) || item.作者.includes(searchText)
       );
     }
-
-    // 分子式筛选（自动适配接口中的分子式）
-    if (filterMolecule !== '全部') {
-      result = result.filter(item => item.分子式 === filterMolecule);
+    // 分子式筛选
+    if (selectedMolecule !== '全部') {
+      result = result.filter(item => item.分子式 === selectedMolecule);
     }
-
+    // 达人量级筛选
+    if (selectedLevel !== '全部') {
+      result = result.filter(item => item.达人量级 === selectedLevel);
+    }
     // 互动量排序
-    result.sort((a, b) => sortType === 'desc' ? b.互动量 - a.互动量 : a.互动量 - b.互动量);
-
+    result.sort((a, b) => sortOrder === 'desc' ? b.互动量 - a.互动量 : a.互动量 - b.互动量);
     return result;
-  }, [formattedPosts, searchKey, filterMolecule, sortType]);
+  }, [data, searchText, selectedMolecule, selectedLevel, sortOrder]);
 
-  // 达人量级标签样式
-  const getLevelTagStyle = (level: string) => {
+  // 达人量级样式
+  const getLevelStyle = (level: string) => {
     const styles: Record<string, { bg: string; color: string }> = {
       '超头部': { bg: '#2D5AF1', color: '#FFF' },
       '头部': { bg: '#EBF0FF', color: '#2D5AF1' },
@@ -262,334 +234,160 @@ export default function DouyinTopPostsPage() {
       '尾部': { bg: '#F8F9FA', color: '#868E96' },
       '未知量级': { bg: '#F8F9FA', color: '#868E96' }
     };
-    return styles[level] || { bg: '#F8F9FA', color: '#495057' };
+    return styles[level] || styles['未知量级'];
   };
+
+  // 加载状态
+  if (loading) {
+    return <div style={{ padding: '48px', textAlign: 'center' }}>加载中...</div>;
+  }
 
   return (
     <div style={{
       width: '100%',
-      minHeight: '100vh',
       padding: '24px',
-      boxSizing: 'border-box',
-      background: '#F8FAFC',
-      fontFamily: 'Inter, system-ui, sans-serif'
-    } as React.CSSProperties}>
-      {/* 页面标题栏 */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '24px',
-        padding: '16px 20px',
-        background: 'linear-gradient(135deg, #FFF 0%, #FAFAFA 100%)',
-        border: '1px solid #E2E8F0',
-        borderRadius: '12px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
-      } as React.CSSProperties}>
-        <h2 style={{
-          margin: 0,
-          fontSize: '20px',
-          fontWeight: 600,
-          color: '#1E293B',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        } as React.CSSProperties}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19 6.41L17.59 5L7 15.59V9H5V19H15V17H8.41L19 6.41Z" fill="#2D5AF1"/>
-          </svg>
-          红书-重点分子式TOP热帖
-        </h2>
-        <div style={{
-          color: '#64748B',
-          fontSize: '14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px'
-        } as React.CSSProperties}>
-          <span style={{
-            padding: '2px 6px',
-            background: '#EBF0FF',
-            color: '#2D5AF1',
-            borderRadius: '4px',
-            fontSize: '12px'
-          } as React.CSSProperties}>
-            {filteredPosts.length}条
-          </span>
-        </div>
+      background: '#f8fafc',
+      fontFamily: 'sans-serif'
+    }}>
+      {/* 标题栏 */}
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: 0, color: '#1e293b' }}>红书-重点分子式TOP热帖</h2>
+        <span style={{ color: '#64748b', fontSize: '14px' }}>
+          共 {filteredData.length} 条数据
+        </span>
       </div>
 
-      {/* 筛选&搜索栏 */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '16px',
-        marginBottom: '24px'
-      } as React.CSSProperties}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          flex: '1 1 280px',
-          maxWidth: '400px',
-          background: '#FFF',
-          border: '1px solid #E2E8F0',
-          borderRadius: '8px',
-          padding: '0 12px',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-        } as React.CSSProperties}>
-          <SearchIcon size={18} color="#64748B" style={{ marginRight: '8px' }} />
-          <input
-            type="text"
-            placeholder="搜索标题/作者..."
-            value={searchKey}
-            onChange={(e) => setSearchKey(e.target.value)}
-            style={{
-              flex: 1,
-              border: 'none',
-              padding: '12px 0',
-              fontSize: '14px',
-              outline: 'none'
-            } as React.CSSProperties}
-          />
-        </div>
-
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          flex: '1 1 200px',
-          maxWidth: '240px'
-        } as React.CSSProperties}>
-          <FilterIcon size={18} color="#64748B" style={{ marginRight: '8px' }} />
-          <select
-            value={filterMolecule}
-            onChange={(e) => setFilterMolecule(e.target.value)}
-            style={{
-              flex: 1,
-              padding: '12px 16px',
-              border: '1px solid #E2E8F0',
-              borderRadius: '8px',
-              backgroundColor: '#FFF',
-              fontSize: '14px',
-              color: '#1E293B',
-              cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              appearance: 'none',
-              backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748B%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 12px center',
-              backgroundSize: '14px'
-            } as React.CSSProperties}
-          >
-            {/* 动态渲染分子式选项，接口更新时自动同步 */}
-            {moleculeOptions.map((item) => (
-              <option key={item} value={item} style={{ padding: '8px' } as React.CSSProperties}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div
-          onClick={() => setSortType(sortType === 'desc' ? 'asc' : 'desc')}
+      {/* 筛选栏 */}
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {/* 搜索框 */}
+        <input
+          type="text"
+          placeholder="搜索标题/作者..."
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
             padding: '12px 16px',
-            background: '#FFF',
-            border: '1px solid #E2E8F0',
+            border: '1px solid #e2e8f0',
             borderRadius: '8px',
-            fontSize: '14px',
-            color: '#1E293B',
-            cursor: 'pointer',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-            transition: 'all 0.2s ease'
-          } as React.CSSProperties}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#F8F9FA'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#FFF'}
+            width: '280px'
+          }}
+        />
+
+        {/* 分子式下拉筛选 */}
+        <CustomDropdown
+          value={selectedMolecule}
+          onChange={setSelectedMolecule}
+          options={dropdownOptions}
+        />
+
+        {/* 达人量级下拉筛选（联动分子式） */}
+        <CustomDropdown
+          value={selectedLevel}
+          onChange={setSelectedLevel}
+          options={levelOptions}
+        />
+
+        {/* 排序按钮 */}
+        <button
+          type="button"
+          onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+          style={{
+            padding: '12px 10px',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            backgroundColor: 'white',
+            cursor: 'pointer'
+          }}
         >
-          互动量排序
-          {sortType === 'desc' ? (
-            <ArrowDownIcon size={16} color="#2D5AF1" />
-          ) : (
-            <ArrowUpIcon size={16} color="#64748B" />
-          )}
-        </div>
+          互动量 {sortOrder === 'desc' ? '降序' : '升序'}
+        </button>
       </div>
 
-      {/* 数据列表（卡片式） */}
+      {/* 数据列表 */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
         gap: '20px'
-      } as React.CSSProperties}>
-        {loading ? (
-          <LoadingSkeleton />
-        ) : error ? (
-          <ErrorTip text={error} />
-        ) : filteredPosts.length > 0 ? (
-          filteredPosts.map((post, index) => {
-            const levelStyle = getLevelTagStyle(post.达人量级);
-            return (
-              <div
-                key={index}
-                style={{
-                  background: 'linear-gradient(180deg, #FFF 0%, #FAFAFA 100%)',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '12px',
-                  padding: '20px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-                  transition: 'all 0.2s ease'
-                } as React.CSSProperties}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                {/* 顶部标签区 */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginBottom: '12px'
-                } as React.CSSProperties}>
-                  <div style={{
-                    display: 'flex',
-                    gap: '8px'
-                  } as React.CSSProperties}>
-                    <span style={{
-                      padding: '4px 8px',
-                      background: '#EBF0FF',
-                      color: '#2D5AF1',
-                      fontSize: '12px',
-                      borderRadius: '6px',
-                      fontWeight: 500
-                    } as React.CSSProperties}>
-                      {post.分子式}
-                    </span>
-                    <span style={{
-                      padding: '4px 8px',
-                      background: '#F8F9FA',
-                      color: '#495057',
-                      fontSize: '12px',
-                      borderRadius: '6px',
-                      fontWeight: 500
-                    } as React.CSSProperties}>
-                      {post.品牌}
-                    </span>
-                  </div>
-                  <span style={{
-                    ...levelStyle,
-                    padding: '4px 8px',
-                    fontSize: '12px',
-                    borderRadius: '6px',
-                    fontWeight: 500
-                  } as React.CSSProperties}>
-                    {post.达人量级}
-                  </span>
-                </div>
-
-                {/* 帖子标题（可点击跳转） */}
-                <a
-                  href={post.标题链接}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    textDecoration: 'none',
-                    display: 'block'
-                  } as React.CSSProperties}
-                >
-                  <h3 style={{
-                    margin: '0 0 16px 0',
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: '#1E293B',
-                    lineHeight: '1.5',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    transition: 'color 0.2s ease'
-                  } as React.CSSProperties}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#2D5AF1';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = '#1E293B';
-                  }}>
-                    {post.标题文本}
-                  </h3>
-                </a>
-
-                {/* 底部信息区 */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: '16px',
-                  paddingTop: '16px',
-                  borderTop: '1px solid #F1F5F9'
-                } as React.CSSProperties}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  } as React.CSSProperties}>
-                    <UserIcon size={16} color="#64748B" />
-                    <span style={{
-                      fontSize: '14px',
-                      color: '#495057',
-                      whiteSpace: 'nowrap',
-                      maxWidth: '180px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    } as React.CSSProperties}>
-                      {post.作者}
-                    </span>
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '14px',
-                    color: '#2D5AF1',
-                    fontWeight: 500
-                  } as React.CSSProperties}>
-                    <MessageSquareIcon size={16} color="#2D5AF1" />
-                    {post.互动量.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        ) : (
+      }}>
+        {filteredData.length === 0 ? (
           <div style={{
             gridColumn: '1/-1',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
             padding: '48px',
-            background: '#FFF',
-            border: '1px dashed #E2E8F0',
-            borderRadius: '12px'
-          } as React.CSSProperties}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M8 12L12 16L16 12" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M12 8V16" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <p style={{
-              marginTop: '16px',
-              fontSize: '14px',
-              color: '#64748B'
-            } as React.CSSProperties}>
-              未找到匹配的热帖数据
-            </p>
+            textAlign: 'center',
+            border: '1px dashed #e2e8f0',
+            borderRadius: '8px'
+          }}>
+            暂无匹配数据
           </div>
+        ) : (
+          filteredData.map((item, idx) => (
+            <div key={idx} style={{
+              padding: '20px',
+              background: 'white',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+            }}>
+              {/* 顶部标签 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <span style={{
+                    padding: '4px 8px',
+                    background: '#ebf0ff',
+                    color: '#2d5af1',
+                    fontSize: '12px',
+                    borderRadius: '4px'
+                  }}>{item.分子式}</span>
+                  <span style={{
+                    padding: '4px 8px',
+                    background: '#f8f9fa',
+                    color: '#495057',
+                    fontSize: '12px',
+                    borderRadius: '4px'
+                  }}>{item.品牌}</span>
+                </div>
+                <span style={{
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  borderRadius: '4px',
+                  backgroundColor: getLevelStyle(item.达人量级).bg,
+                  color: getLevelStyle(item.达人量级).color
+                }}>{item.达人量级}</span>
+              </div>
+
+              {/* 标题 */}
+              <a
+                href={item.标题链接}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: '#1e293b',
+                  textDecoration: 'none',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  marginBottom: '16px'
+                }}
+              >
+                <h3 style={{ margin: 0, fontSize: '16px' }}>{item.标题文本}</h3>
+              </a>
+
+              {/* 底部信息 */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingTop: '16px',
+                borderTop: '1px solid #f1f5f9'
+              }}>
+                <span style={{ color: '#64748b', fontSize: '14px' }}>{item.作者}</span>
+                <span style={{ color: '#2d5af1', fontWeight: '500' }}>
+                  互动量: {item.互动量.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>

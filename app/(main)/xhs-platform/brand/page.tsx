@@ -1,651 +1,1391 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react';
-import ReactECharts from 'echarts-for-react';
 import axios from 'axios';
-import styles from './page.module.css';
+import { useMonthContext } from '@/app/(main)/context/MonthContext';
+import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
+import type { CallbackDataParams } from 'echarts/types/dist/shared';
 
-// 定义数据类型接口（规范数据结构）
+interface TableField {
+  '值': string;
+  '品牌': string;
+  '分析指标': string;
+  '拆分方式': string;
+  '日期': string;
+  '标题': string;
+  '平台': string;
+}
+
 interface RawDataItem {
-  fields: {
-    标题?: string;
-    拆分方式?: string;
-    分析指标?: string;
-    日期?: string;
-    品牌?: string;
-    值?: string | number;
-  };
+  fields: TableField;
+  id: string;
+  record_id: string;
 }
 
-interface BarData {
+interface BrandData {
+  totalVoice: string;
+  sov: string;
+  totalInteract: string;
+  soe: string;
+}
+
+interface ProcessedTableData {
+  grouped: Record<string, Record<string, BrandData>>;
+  sortedDates: string[];
   brands: string[];
-  totalVoice: number[];
-  totalInteract: number[];
 }
 
-interface PieDataItem {
-  name: string;
-  value: number;
+interface PlatformBrandData extends BrandData {
+  platform: string;
 }
 
-// 为全局样式配置添加精确的 TypeScript 类型
-interface ChartStyleConfig {
-  container: React.CSSProperties;
-  style: React.CSSProperties;
-  parent: React.CSSProperties;
+interface ProcessedPlatformData {
+  grouped: Record<string, Record<string, BrandData>>;
+  platforms: string[];
+  brands: string[];
+  selectedMonth: string;
 }
 
-export default function SOVSOEPieChartPage() {
-  // 修复：给useState添加泛型类型
-  const [rawData, setRawData] = useState<RawDataItem[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<string>('Aug-25');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [sovPieData, setSovPieData] = useState<PieDataItem[]>([]);
-  const [soePieData, setSoePieData] = useState<PieDataItem[]>([]);
-  const [barData, setBarData] = useState<BarData>({ brands: [], totalVoice: [], totalInteract: [] });
+// ========== 修改点1：扩展子标签类型，新增 KOC ==========
+type MainTabType = 'kpiOverview' | 'hcpNonHcp' | 'kolUgc' | 'voicePlatformDistribution';
+type SubTabType = 'hcp' | 'nonHcp' | 'kol' | 'ugc' | 'koc'; // 新增 koc 类型
 
-  // 🔥 核心修复：使用 any 类型绕过类型检查（最稳妥的生产级解决方案）
-  // 因为 echarts-for-react 的类型定义存在不一致问题，这是业界通用的解决方案
-  const sovChartRef = useRef<any>(null);
-  const soeChartRef = useRef<any>(null);
-  const voiceBarChartRef = useRef<any>(null);
-  const interactBarChartRef = useRef<any>(null);
+const mainTabConfig = [
+  { key: 'kpiOverview', label: 'KPI总览' },
+  { key: 'hcpNonHcp', label: 'HCP/NON-HCP' },
+  { key: 'kolUgc', label: 'KOL/UGC/KOC' },
+  //{ key: 'voicePlatformDistribution', label: '声量及互动量平台分布' }
+];
 
-  // 全局统一样式配置，现在拥有精确的类型定义
-  const CHART_STYLE_CONFIG: ChartStyleConfig = {
-    container: {
-      width: '48%',
-      minWidth: '400px',
-      height: '450px',
-    },
-    style: {
-      border: '1px solid #e2e8f0',
-      borderRadius: '12px',
-      padding: '20px',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-      boxSizing: 'border-box',
-      background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 100%)',
-      transition: 'all 0.2s ease',
-    },
-    parent: {
-      width: '100%',
-      display: 'flex',
-      gap: '24px',
-      flexWrap: 'wrap',
-      alignItems: 'stretch',
-      justifyContent: 'center',
-      margin: '16px 0',
-      boxSizing: 'border-box'
-    }
+const subTabConfigs = {
+  hcpNonHcp: [
+    { key: 'hcp' as SubTabType, label: 'HCP' },
+    { key: 'nonHcp' as SubTabType, label: 'NON-HCP' }
+  ],
+  // ========== 修改点2：在 kolUgc 中新增 KOC 子标签 ==========
+  kolUgc: [
+    { key: 'kol' as SubTabType, label: 'KOL' },
+    { key: 'ugc' as SubTabType, label: 'UGC' },
+    { key: 'koc' as SubTabType, label: 'KOC' } // 新增 KOC 标签
+  ]
+};
+
+const parseMonthString = (monthStr: string): Date => {
+  const [month, year] = monthStr.split('-');
+  const monthMap: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
   };
+  const fullYear = parseInt(year, 10) + 2000;
+  return new Date(fullYear, monthMap[month], 1);
+};
 
-  const chartContainerStyle = {
-    ...CHART_STYLE_CONFIG.container,
-    ...CHART_STYLE_CONFIG.style
+const normalizeBrandName = (name: string): string => {
+  if (!name) return '';
+  return name.trim().replace(/\s+/g, '').replace(/　/g, '');
+};
+
+const getLineChartOption = (
+  sortedDates: string[],
+  grouped: Record<string, Record<string, BrandData>>,
+  brands: string[],
+  indicatorType: 'totalVoice' | 'totalInteract',
+  yAxisName: string
+) => {
+  const series = brands.map((brand, index) => {
+    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16', '#a0d911', '#13c2c2'];
+    const data = sortedDates.map(month => {
+      const value = grouped[month]?.[brand]?.[indicatorType] || '-';
+      if (value === '-' || value === '' || value === '无' || value === null || value === undefined) {
+        return 0;
+      }
+      const numericValue = parseFloat(value.toString().replace(/[^\d.]/g, ''));
+      return isNaN(numericValue) ? 0 : numericValue;
+    });
+
+    return {
+      name: brand,
+      type: 'line',
+      data: data,
+      smooth: true,
+      itemStyle: { color: colors[index], borderWidth: 2 },
+      lineStyle: { width: 2, color: colors[index] },
+      symbol: 'circle',
+      symbolSize: 8,
+      emphasis: { symbolSize: 12 },
+      connectNulls: true
+    };
+  });
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      textStyle: { fontSize: 12 },
+      backgroundColor: 'rgba(255,255,255,0.9)',
+      borderColor: '#e5e7eb',
+      borderWidth: 1,
+      padding: 10,
+      formatter: function(params: any) {
+        let result = `<div style="font-weight:600;margin-bottom:4px;">${params[0].axisValue}</div>`;
+        params.forEach((param: any) => {
+          result += `<div style="margin:2px 0;">
+            <span style="display:inline-block;width:8px;height:8px;background:${param.color};border-radius:50%;margin-right:6px;"></span>
+            ${param.seriesName}：${param.data === 0 ? '-' : param.data}
+          </div>`;
+        });
+        return result;
+      }
+    },
+    legend: { data: brands, textStyle: { fontSize: 12 }, bottom: 0, left: 'center' },
+    grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: sortedDates,
+      axisLabel: { fontSize: 12 },
+      axisLine: { lineStyle: { color: '#d1d5db' } },
+      name: '时间（月份）',
+      nameTextStyle: { fontSize: 12, padding: [0, 0, 5, 0] }
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { fontSize: 12 },
+      axisLine: { lineStyle: { color: '#d1d5db' } },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
+      name: yAxisName,
+      nameTextStyle: { fontSize: 12 },
+      nameRotate: 90,
+      nameLocation: 'middle',
+      nameGap: 30,
+      min: 0
+    },
+    series: series,
+    responsive: true
   };
+};
 
-  // 请求原始数据
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const res = await axios.get('http://localhost:3000/api/feishu/records');
-        setRawData(res.data);
-      } catch (err) {
-        console.error('数据请求失败：', err);
-        alert('数据加载失败，请检查接口是否可用');
-      } finally {
-        setLoading(false);
+const getAreaChartOption = (
+  sortedDates: string[],
+  grouped: Record<string, Record<string, BrandData>>,
+  brands: string[],
+  indicatorType: 'sov' | 'soe',
+  yAxisName: string
+) => {
+  const series = brands.map((brand, index) => {
+    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16', '#a0d911', '#13c2c2'];
+    const data = sortedDates.map(month => {
+      const value = grouped[month]?.[brand]?.[indicatorType] || '-';
+      if (value === '-' || value === '' || value === '无' || value === null || value === undefined) {
+        return 0;
+      }
+      const numericValue = parseFloat(value.toString().replace(/[%]/g, ''));
+      return isNaN(numericValue) ? 0 : numericValue;
+    });
+
+    return {
+      name: brand,
+      type: 'line',
+      stack: 'total',
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: colors[index] },
+          { offset: 1, color: `${colors[index]}33` }
+        ]),
+        opacity: 0.8
+      },
+      data: data,
+      smooth: true,
+      itemStyle: { color: colors[index], borderWidth: 2 },
+      lineStyle: { width: 2, color: colors[index] },
+      symbol: 'circle',
+      symbolSize: 6,
+      emphasis: { symbolSize: 10 },
+      connectNulls: true
+    };
+  });
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      textStyle: { fontSize: 12 },
+      backgroundColor: 'rgba(255,255,255,0.9)',
+      borderColor: '#e5e7eb',
+      borderWidth: 1,
+      padding: 10,
+      formatter: function(params: any) {
+        let result = `<div style="font-weight:600;margin-bottom:4px;">${params[0].axisValue}</div>`;
+        let total = 0;
+        params.forEach((param: any) => {
+          total += param.data;
+          result += `<div style="margin:2px 0;">
+            <span style="display:inline-block;width:8px;height:8px;background:${param.color};border-radius:50%;margin-right:6px;"></span>
+            ${param.seriesName}：${param.data === 0 ? '-' : `${param.data}%`}
+          </div>`;
+        });
+        result += `<div style="margin:2px 0;font-weight:600;">总计：${total.toFixed(1)}%</div>`;
+        return result;
+      }
+    },
+    legend: { data: brands, textStyle: { fontSize: 12 }, bottom: 0, left: 'center' },
+    grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: sortedDates,
+      axisLabel: { fontSize: 12 },
+      axisLine: { lineStyle: { color: '#d1d5db' } },
+      name: '时间（月份）',
+      nameTextStyle: { fontSize: 12, padding: [0, 0, 5, 0] }
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { formatter: '{value}%', fontSize: 12 },
+      axisLine: { lineStyle: { color: '#d1d5db' } },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
+      name: yAxisName,
+      nameTextStyle: { fontSize: 12 },
+      nameRotate: 90,
+      nameLocation: 'middle',
+      nameGap: 30,
+      min: 0,
+      max: 100
+    },
+    series: series,
+    responsive: true
+  };
+};
+
+const getPlatformChartOption = (
+  platforms: string[],
+  grouped: Record<string, Record<string, BrandData>>,
+  brands: string[],
+  indicatorType: 'totalVoice' | 'totalInteract' | 'sov' | 'soe',
+  yAxisName: string,
+  isPercentage: boolean = false
+) => {
+  const series = brands.map((brand, index) => {
+    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16', '#a0d911', '#13c2c2'];
+    const data = platforms.map(platform => {
+      const value = grouped[platform]?.[brand]?.[indicatorType] || '-';
+      if (value === '-' || value === '' || value === '无' || value === null || value === undefined) {
+        return 0;
+      }
+      let numericValue;
+      if (isPercentage) {
+        numericValue = parseFloat(value.toString().replace(/[%]/g, ''));
+      } else {
+        numericValue = parseFloat(value.toString().replace(/[,]/g, '').replace(/[^\d.]/g, ''));
+      }
+      return isNaN(numericValue) ? 0 : numericValue;
+    });
+
+    return {
+      name: brand,
+      type: 'bar',
+      stack: 'total',
+      data: data,
+      itemStyle: { color: colors[index], borderRadius: [0, 4, 4, 0] },
+      emphasis: { itemStyle: { color: colors[index], opacity: 0.8 } },
+      // 修复 formatter 类型问题
+      label: {
+        formatter: function(params: CallbackDataParams) {
+          const value = params.value as number;
+          return value === 0 ? '' : isPercentage ? `${value}%` : value.toString();
+        }
       }
     };
-    fetchData();
+  });
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      textStyle: { fontSize: 12 },
+      backgroundColor: 'rgba(255,255,255,0.9)',
+      borderColor: '#e5e7eb',
+      borderWidth: 1,
+      padding: 10,
+      formatter: function(params: any) {
+        let result = `<div style="font-weight:600;margin-bottom:4px;">${params[0].axisValue}</div>`;
+        let total = 0;
+        params.forEach((param: any) => {
+          total += param.data;
+          const displayValue = param.data === 0 ? '-' : isPercentage ? `${param.data}%` : param.data;
+          result += `<div style="margin:2px 0;">
+            <span style="display:inline-block;width:8px;height:8px;background:${param.color};border-radius:50%;margin-right:6px;"></span>
+            ${param.seriesName}：${displayValue}
+          </div>`;
+        });
+        const totalDisplay = isPercentage ? `${total.toFixed(1)}%` : total;
+        result += `<div style="margin:2px 0;font-weight:600;">总计：${totalDisplay}</div>`;
+        return result;
+      }
+    },
+    legend: { data: brands, textStyle: { fontSize: 11 }, right: 19, bottom: 0, orient: 'horizontal' },
+    grid: { left: '3%', right: '7%', bottom: '13%', top: '8%', containLabel: true },
+    yAxis: {
+      type: 'category',
+      data: platforms,
+      axisLabel: { fontSize: 12, align: 'right' },
+      axisLine: { lineStyle: { color: '#d1d5db' } },
+      name: '平台',
+      nameTextStyle: { fontSize: 12 },
+      nameRotate: 0,
+      nameLocation: 'end',
+      nameGap: 10
+    },
+    xAxis: {
+      type: 'value',
+      axisLabel: { fontSize: 12, formatter: isPercentage ? '{value}%' : '{value}' },
+      axisLine: { lineStyle: { color: '#d1d5db' } },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
+      name: yAxisName,
+      nameTextStyle: { fontSize: 12 },
+      nameRotate: 0,
+      nameLocation: 'middle',
+      nameGap: 20,
+      min: 0,
+      max: isPercentage ? 100 : undefined
+    },
+    series: series,
+    responsive: true
+  };
+};
+
+const EmptyPanel: React.FC<{ title: string; subTitle?: string }> = ({ title, subTitle }) => {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '600px',
+      backgroundColor: '#ffffff',
+      borderRadius: '8px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+      marginTop: '16px',
+      padding: '24px'
+    }}>
+      <div style={{ fontSize: '20px', color: '#64748b', marginBottom: '8px' }}>📊 {title}</div>
+      {subTitle && <div style={{ fontSize: '16px', color: '#94a3b8', marginBottom: '16px' }}>{subTitle}</div>}
+      <div style={{ fontSize: '16px', color: '#94a3b8' }}>该模块正在开发中，敬请期待...</div>
+    </div>
+  );
+};
+
+export default function BrandTablePage() {
+  const { selectedMonth } = useMonthContext();
+  const [kpiTableData, setKpiTableData] = useState<ProcessedTableData>({ grouped: {}, sortedDates: [], brands: [] });
+  const [hcpTableData, setHcpTableData] = useState<ProcessedTableData>({ grouped: {}, sortedDates: [], brands: [] });
+  const [nonHcpTableData, setNonHcpTableData] = useState<ProcessedTableData>({ grouped: {}, sortedDates: [], brands: [] });
+  const [kolTableData, setKolTableData] = useState<ProcessedTableData>({ grouped: {}, sortedDates: [], brands: [] });
+  const [ugcTableData, setUgcTableData] = useState<ProcessedTableData>({ grouped: {}, sortedDates: [], brands: [] });
+  // ========== 修改点3：新增 KOC 数据状态 ==========
+  const [kocTableData, setKocTableData] = useState<ProcessedTableData>({ grouped: {}, sortedDates: [], brands: [] });
+  const [platformTableData, setPlatformTableData] = useState<ProcessedPlatformData>({
+    grouped: {}, platforms: [], brands: [], selectedMonth: selectedMonth
+  });
+
+  const [kpiLoading, setKpiLoading] = useState(true);
+  const [hcpLoading, setHcpLoading] = useState(false);
+  const [nonHcpLoading, setNonHcpLoading] = useState(false);
+  const [kolLoading, setKolLoading] = useState(false);
+  const [ugcLoading, setUgcLoading] = useState(false);
+  // ========== 修改点4：新增 KOC 加载状态 ==========
+  const [kocLoading, setKocLoading] = useState(false);
+  const [platformLoading, setPlatformLoading] = useState(false);
+
+  const [activeMainTab, setActiveMainTab] = useState<MainTabType>('kpiOverview');
+  const [activeSubTab, setActiveSubTab] = useState<SubTabType>('hcp');
+  const [copySuccess, setCopySuccess] = useState('');
+
+  // ====================== 刷新触发器（核心） ======================
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleRefresh = () => {
+    // 清空所有数据
+    setKpiTableData({ grouped: {}, sortedDates: [], brands: [] });
+    setHcpTableData({ grouped: {}, sortedDates: [], brands: [] });
+    setNonHcpTableData({ grouped: {}, sortedDates: [], brands: [] });
+    setKolTableData({ grouped: {}, sortedDates: [], brands: [] });
+    setUgcTableData({ grouped: {}, sortedDates: [], brands: [] });
+    // ========== 修改点5：清空 KOC 数据 ==========
+    setKocTableData({ grouped: {}, sortedDates: [], brands: [] });
+    setPlatformTableData({ grouped: {}, platforms: [], brands: [], selectedMonth });
+    // 触发重刷
+    setRefreshKey(prev => prev + 1);
+  };
+
+  // 修复 Ref 类型：显式指定类型为 RefObject<ReactECharts>（useRef 默认值用 {} as ReactECharts 避免 null）
+  const kpiVoiceChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kpiInteractChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kpiSovAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kpiSoeAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+
+  const hcpVoiceChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const hcpInteractChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const hcpSovAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const hcpSoeAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+
+  const nonHcpVoiceChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const nonHcpInteractChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const nonHcpSovAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const nonHcpSoeAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+
+  const kolVoiceChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kolInteractChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kolSovAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kolSoeAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+
+  const ugcVoiceChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const ugcInteractChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const ugcSovAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const ugcSoeAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+
+  // ========== 修改点6：新增 KOC 图表 Ref ==========
+  const kocVoiceChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kocInteractChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kocSovAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const kocSoeAreaChartRef = useRef<ReactECharts>({} as ReactECharts);
+
+  const platformVoiceChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const platformInteractChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const platformSovChartRef = useRef<ReactECharts>({} as ReactECharts);
+  const platformSoeChartRef = useRef<ReactECharts>({} as ReactECharts);
+
+  useEffect(() => {
+    if (activeMainTab === 'hcpNonHcp') setActiveSubTab('hcp');
+    // ========== 修改点7：KOL/UGC 标签切换时默认选中 KOL ==========
+    if (activeMainTab === 'kolUgc') setActiveSubTab('kol');
+  }, [activeMainTab]);
+
+  const copyToClipboard = (text: string, tip: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopySuccess(tip);
+      setTimeout(() => setCopySuccess(''), 1500);
+    }).catch(err => {
+      console.error('复制失败:', err);
+      setCopySuccess('复制失败，请手动复制');
+      setTimeout(() => setCopySuccess(''), 1500);
+    });
+  };
+
+  const copyTableData = (tableData: ProcessedTableData, panelName: string) => {
+    if (tableData.sortedDates.length === 0 || tableData.brands.length === 0) {
+      setCopySuccess('暂无数据可复制');
+      setTimeout(() => setCopySuccess(''), 1500);
+      return;
+    }
+    const header = ['月份'];
+    tableData.brands.forEach(brand => {
+      header.push(`${brand}-总声量`, `${brand}-SOV`, `${brand}-总互动量`, `${brand}-SOE`);
+    });
+    const lines = [header.join('\t')];
+    tableData.sortedDates.forEach(date => {
+      const row = [date];
+      tableData.brands.forEach(brand => {
+        const data = tableData.grouped[date][brand];
+        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+      });
+      lines.push(row.join('\t'));
+    });
+    copyToClipboard(lines.join('\n'), `${panelName} 表格数据已复制，可直接粘贴到 Excel`);
+  };
+
+  const copyPlatformData = (platformData: ProcessedPlatformData) => {
+    if (platformData.platforms.length === 0 || platformData.brands.length === 0) {
+      setCopySuccess('暂无数据可复制');
+      setTimeout(() => setCopySuccess(''), 1500);
+      return;
+    }
+    const header = ['平台'];
+    platformData.brands.forEach(brand => {
+      header.push(`${brand}-总声量`, `${brand}-SOV`, `${brand}-总互动量`, `${brand}-SOE`);
+    });
+    const lines = [header.join('\t')];
+    platformData.platforms.forEach(platform => {
+      const row = [platform];
+      platformData.brands.forEach(brand => {
+        const data = platformData.grouped[platform]?.[brand] || { totalVoice: '-', sov: '-', totalInteract: '-', soe: '-' };
+        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+      });
+      lines.push(row.join('\t'));
+    });
+    copyToClipboard(lines.join('\n'), `平台分布数据（${platformData.selectedMonth}）已复制，可直接粘贴到 Excel`);
+  };
+
+  const copyChartData = (
+    tableData: ProcessedTableData,
+    indicatorType: 'totalVoice' | 'totalInteract' | 'sov' | 'soe',
+    indicatorName: string,
+    panelName: string
+  ) => {
+    if (tableData.sortedDates.length === 0 || tableData.brands.length === 0) {
+      setCopySuccess('暂无数据可复制');
+      setTimeout(() => setCopySuccess(''), 1500);
+      return;
+    }
+    const header = ['月份', ...tableData.brands];
+    const lines = [header.join('\t')];
+    tableData.sortedDates.forEach(date => {
+      const row = [date];
+      tableData.brands.forEach(brand => {
+        const value = tableData.grouped[date][brand][indicatorType];
+        row.push(value);
+      });
+      lines.push(row.join('\t'));
+    });
+    copyToClipboard(lines.join('\n'), `${panelName} - ${indicatorName} 数据已复制，可直接粘贴到 Excel`);
+  };
+
+  const copyPlatformChartData = (
+    platformData: ProcessedPlatformData,
+    indicatorType: 'totalVoice' | 'totalInteract' | 'sov' | 'soe',
+    indicatorName: string
+  ) => {
+    if (platformData.platforms.length === 0 || platformData.brands.length === 0) {
+      setCopySuccess('暂无数据可复制');
+      setTimeout(() => setCopySuccess(''), 1500);
+      return;
+    }
+    const header = ['平台', ...platformData.brands];
+    const lines = [header.join('\t')];
+    platformData.platforms.forEach(platform => {
+      const row = [platform];
+      platformData.brands.forEach(brand => {
+        const data = platformData.grouped[platform]?.[brand] || { totalVoice: '-', sov: '-', totalInteract: '-', soe: '-' };
+        row.push(data[indicatorType]);
+      });
+      lines.push(row.join('\t'));
+    });
+    copyToClipboard(lines.join('\n'), `平台分布 - ${indicatorName} 数据（${platformData.selectedMonth}）已复制，可直接粘贴到 Excel`);
+  };
+
+  // 修复 hover 样式问题：使用 React 支持的 onMouseEnter/onMouseLeave 替代 &:hover
+  const getCopyBtnStyle = (isDisabled: boolean = false): React.CSSProperties => ({
+    padding: '6px 14px',
+    fontSize: 13,
+    border: '1px solid #e2e8f0',
+    borderRadius: 8,
+    background: isDisabled ? '#f8fafc' : '#fff',
+    cursor: isDisabled ? 'not-allowed' : 'pointer',
+    transition: 'all 0.2s',
+    margin: '0 8px 8px 0',
+    opacity: isDisabled ? 0.7 : 1
+  });
+
+  const processTableData = (rawData: RawDataItem[], splitType: string): ProcessedTableData => {
+    const filtered = rawData.filter(item =>
+      item.fields?.['标题'] === '重点品牌声量及互动量表现（红书） ' &&
+      item.fields?.['拆分方式'] === splitType && item.fields?.['品牌']
+    );
+    const grouped: Record<string, Record<string, BrandData>> = {};
+    const dates = new Set<string>();
+    const standardBrands = ['迪敏思', '雷诺考特', '舒霏敏', '内舒拿', '辅舒良', '开瑞坦'];
+    const brandNameMap: Record<string, string> = {
+      '迪敏思': '迪敏思', '雷诺考特': '雷诺考特', '舒霏敏': '舒霏敏',
+      '内舒拿': '内舒拿', '辅舒良': '辅舒良', '开瑞坦': '开瑞坦'
+    };
+    filtered.forEach(item => {
+      const date = item.fields['日期'];
+      let brand = item.fields['品牌'];
+      const indicator = item.fields['分析指标'];
+      const value = item.fields['值'] || '-';
+      if (!date || !brand) return;
+      const normalizedName = normalizeBrandName(brand);
+      const matchedName = brandNameMap[normalizedName] ||
+        Object.entries(brandNameMap).find(([key]) =>
+          normalizedName.includes(key) || key.includes(normalizedName)
+        )?.[1] || normalizedName;
+      if (!standardBrands.includes(matchedName)) return;
+      if (!grouped[date]) {
+        grouped[date] = {};
+        standardBrands.forEach(b => {
+          grouped[date][b] = { totalVoice: '-', sov: '-', totalInteract: '-', soe: '-' };
+        });
+      }
+      dates.add(date);
+      let processedValue = value === '' || value === '无' ? '-' : value;
+      switch (indicator) {
+        case '总声量': grouped[date][matchedName].totalVoice = processedValue; break;
+        case 'SOV': grouped[date][matchedName].sov = processedValue; break;
+        case '总互动量': grouped[date][matchedName].totalInteract = processedValue; break;
+        case 'SOE': grouped[date][matchedName].soe = processedValue; break;
+      }
+    });
+    const sortedDates = Array.from(dates).sort((a, b) => parseMonthString(a).getTime() - parseMonthString(b).getTime());
+    return { grouped, sortedDates, brands: standardBrands };
+  };
+
+  const processPlatformData = (rawData: RawDataItem[], splitType: string, targetMonth: string): ProcessedPlatformData => {
+    const filtered = rawData.filter(item =>
+      item.fields?.['标题'] === '重点品牌声量及互动量表现（红书） ' &&
+      item.fields?.['拆分方式'] === splitType &&
+      item.fields?.['日期'] === targetMonth &&
+      item.fields?.['品牌'] && item.fields?.['平台']
+    );
+    const grouped: Record<string, Record<string, BrandData>> = {};
+    const platforms = new Set<string>();
+    const standardBrands = ['迪敏思', '雷诺考特', '舒霏敏', '内舒拿', '辅舒良', '开瑞坦'];
+    const brandNameMap: Record<string, string> = {
+      '迪敏思': '迪敏思', '雷诺考特': '雷诺考特', '舒霏敏': '舒霏敏',
+      '内舒拿': '内舒拿', '辅舒良': '辅舒良', '开瑞坦': '开瑞坦'
+    };
+    filtered.forEach(item => {
+      const platform = item.fields['平台'];
+      let brand = item.fields['品牌'];
+      const indicator = item.fields['分析指标'];
+      const value = item.fields['值'] || '-';
+      if (!platform || !brand) return;
+      const normalizedName = normalizeBrandName(brand);
+      const matchedName = brandNameMap[normalizedName] ||
+        Object.entries(brandNameMap).find(([key]) =>
+          normalizedName.includes(key) || key.includes(normalizedName)
+        )?.[1] || normalizedName;
+      if (!standardBrands.includes(matchedName)) return;
+      if (!grouped[platform]) {
+        grouped[platform] = {};
+        standardBrands.forEach(b => {
+          grouped[platform][b] = { totalVoice: '-', sov: '-', totalInteract: '-', soe: '-' };
+        });
+      }
+      platforms.add(platform);
+      let processedValue = value === '' || value === '无' ? '-' : value;
+      switch (indicator) {
+        case '总声量': grouped[platform][matchedName].totalVoice = processedValue; break;
+        case 'SOV': grouped[platform][matchedName].sov = processedValue; break;
+        case '总互动量': grouped[platform][matchedName].totalInteract = processedValue; break;
+        case 'SOE': grouped[platform][matchedName].soe = processedValue; break;
+      }
+    });
+    const sortedPlatforms = Array.from(platforms).sort();
+    return { grouped, platforms: sortedPlatforms, brands: standardBrands, selectedMonth: targetMonth };
+  };
+
+  // 所有 useEffect 最后加 [refreshKey]
+  useEffect(() => {
+    if (activeMainTab === 'kpiOverview') {
+      const fetchKpiData = async () => {
+        try {
+          setKpiLoading(true);
+          const res = await axios.get('http://localhost:3000/api/feishu/XHSBrand');
+          const processedTableData = processTableData(res.data as RawDataItem[], '全量数据');
+          setKpiTableData(processedTableData);
+        } catch (err) {
+          console.error('KPI数据加载失败:', err);
+        } finally {
+          setKpiLoading(false);
+        }
+      };
+      fetchKpiData();
+    }
+  }, [activeMainTab, refreshKey]);
+
+  useEffect(() => {
+    if (activeMainTab === 'hcpNonHcp' && activeSubTab === 'hcp') {
+      const fetchHcpData = async () => {
+        try {
+          setHcpLoading(true);
+          const res = await axios.get('http://localhost:3000/api/feishu/XHSBrandHCP');
+          const processedTableData = processTableData(res.data as RawDataItem[], 'HCP');
+          setHcpTableData(processedTableData);
+        } catch (err) {
+          console.error('HCP数据加载失败:', err);
+        } finally {
+          setHcpLoading(false);
+        }
+      };
+      fetchHcpData();
+    }
+  }, [activeMainTab, activeSubTab, refreshKey]);
+
+  useEffect(() => {
+    if (activeMainTab === 'hcpNonHcp' && activeSubTab === 'nonHcp') {
+      const fetchNonHcpData = async () => {
+        try {
+          setNonHcpLoading(true);
+          const res = await axios.get('http://localhost:3000/api/feishu/XHSBrandNONHCP');
+          const processedTableData = processTableData(res.data as RawDataItem[], 'NON-HCP');
+          setNonHcpTableData(processedTableData);
+        } catch (err) {
+          console.error('NON-HCP数据加载失败:', err);
+        } finally {
+          setNonHcpLoading(false);
+        }
+      };
+      fetchNonHcpData();
+    }
+  }, [activeMainTab, activeSubTab, refreshKey]);
+
+  useEffect(() => {
+    if (activeMainTab === 'kolUgc' && activeSubTab === 'kol') {
+      const fetchKolData = async () => {
+        try {
+          setKolLoading(true);
+          const res = await axios.get('http://localhost:3000/api/feishu/XHSBrandKOL');
+          const processedTableData = processTableData(res.data as RawDataItem[], 'KOL');
+          setKolTableData(processedTableData);
+        } catch (err) {
+          console.error('KOL数据加载失败:', err);
+        } finally {
+          setKolLoading(false);
+        }
+      };
+      fetchKolData();
+    }
+  }, [activeMainTab, activeSubTab, refreshKey]);
+
+  useEffect(() => {
+    if (activeMainTab === 'kolUgc' && activeSubTab === 'ugc') {
+      const fetchUgcData = async () => {
+        try {
+          setUgcLoading(true);
+          const res = await axios.get('http://localhost:3000/api/feishu/XHSBrandUGC');
+          const processedTableData = processTableData(res.data as RawDataItem[], 'UGC');
+          setUgcTableData(processedTableData);
+        } catch (err) {
+          console.error('UGC数据加载失败:', err);
+        } finally {
+          setUgcLoading(false);
+        }
+      };
+      fetchUgcData();
+    }
+  }, [activeMainTab, activeSubTab, refreshKey]);
+
+  // ========== 修改点8：新增 KOC 数据加载逻辑 ==========
+  useEffect(() => {
+    if (activeMainTab === 'kolUgc' && activeSubTab === 'koc') {
+      const fetchKocData = async () => {
+        try {
+          setKocLoading(true);
+          // 注意：这里的 API 地址需要根据你的实际后端接口调整
+          const res = await axios.get('http://localhost:3000/api/feishu/XHSBrandKOC');
+          const processedTableData = processTableData(res.data as RawDataItem[], 'KOC');
+          setKocTableData(processedTableData);
+        } catch (err) {
+          console.error('KOC数据加载失败:', err);
+        } finally {
+          setKocLoading(false);
+        }
+      };
+      fetchKocData();
+    }
+  }, [activeMainTab, activeSubTab, refreshKey]);
+
+  useEffect(() => {
+    if (activeMainTab === 'voicePlatformDistribution') {
+      const fetchPlatformData = async () => {
+        try {
+          setPlatformLoading(true);
+          const res = await axios.get('http://localhost:3000/api/feishu/XHSBrandDistribution');
+          const processedPlatformData = processPlatformData(
+            res.data as RawDataItem[],
+            '声量及互动量平台分布',
+            selectedMonth
+          );
+          setPlatformTableData(processedPlatformData);
+        } catch (err) {
+          console.error('平台分布数据加载失败:', err);
+        } finally {
+          setPlatformLoading(false);
+        }
+      };
+      fetchPlatformData();
+    }
+  }, [activeMainTab, selectedMonth, refreshKey]);
+
+  useEffect(() => {
+    const resizeHandler = () => {
+      // 修复 resize 时的 null 检查
+      kpiVoiceChartRef.current?.getEchartsInstance?.().resize();
+      kpiInteractChartRef.current?.getEchartsInstance?.().resize();
+      kpiSovAreaChartRef.current?.getEchartsInstance?.().resize();
+      kpiSoeAreaChartRef.current?.getEchartsInstance?.().resize();
+
+      hcpVoiceChartRef.current?.getEchartsInstance?.().resize();
+      hcpInteractChartRef.current?.getEchartsInstance?.().resize();
+      hcpSovAreaChartRef.current?.getEchartsInstance?.().resize();
+      hcpSoeAreaChartRef.current?.getEchartsInstance?.().resize();
+
+      nonHcpVoiceChartRef.current?.getEchartsInstance?.().resize();
+      nonHcpInteractChartRef.current?.getEchartsInstance?.().resize();
+      nonHcpSovAreaChartRef.current?.getEchartsInstance?.().resize();
+      nonHcpSoeAreaChartRef.current?.getEchartsInstance?.().resize();
+
+      kolVoiceChartRef.current?.getEchartsInstance?.().resize();
+      kolInteractChartRef.current?.getEchartsInstance?.().resize();
+      kolSovAreaChartRef.current?.getEchartsInstance?.().resize();
+      kolSoeAreaChartRef.current?.getEchartsInstance?.().resize();
+
+      ugcVoiceChartRef.current?.getEchartsInstance?.().resize();
+      ugcInteractChartRef.current?.getEchartsInstance?.().resize();
+      ugcSovAreaChartRef.current?.getEchartsInstance?.().resize();
+      ugcSoeAreaChartRef.current?.getEchartsInstance?.().resize();
+
+      // ========== 修改点9：新增 KOC 图表 resize 处理 ==========
+      kocVoiceChartRef.current?.getEchartsInstance?.().resize();
+      kocInteractChartRef.current?.getEchartsInstance?.().resize();
+      kocSovAreaChartRef.current?.getEchartsInstance?.().resize();
+      kocSoeAreaChartRef.current?.getEchartsInstance?.().resize();
+
+      platformVoiceChartRef.current?.getEchartsInstance?.().resize();
+      platformInteractChartRef.current?.getEchartsInstance?.().resize();
+      platformSovChartRef.current?.getEchartsInstance?.().resize();
+      platformSoeChartRef.current?.getEchartsInstance?.().resize();
+    };
+    window.addEventListener('resize', resizeHandler);
+    return () => window.removeEventListener('resize', resizeHandler);
   }, []);
 
-  // 给indicatorType添加明确类型
-  const formatPieData = (indicatorType: 'SOV' | 'SOE' | '总声量' | '总互动量'): PieDataItem[] => {
-    if (rawData.length === 0) return [];
-    const filteredData = rawData.filter(item => {
-      const fields = item.fields;
+  const tableStyles = {
+    container: { marginTop: '24px', overflowX: 'auto' as const, borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
+    table: { width: '100%', borderCollapse: 'collapse' as const, fontFamily: 'Inter, sans-serif', fontSize: '14px', lineHeight: '1.2' },
+    headerRow1: { backgroundColor: '#facc15', color: '#1e293b', lineHeight: '1.2' },
+    headerRow2: { backgroundColor: '#4b5563', color: '#ffffff', lineHeight: '1.2' },
+    bodyRow: { backgroundColor: '#ffffff', borderBottom: '1px solid #e5e7eb', lineHeight: '1.2' },
+    cell: { border: '1px solid #d1d5db', padding: '6px 8px', textAlign: 'center' as const },
+    headerCell: { border: '1px solid #d1d5db', padding: '6px 8px', textAlign: 'center' as const, fontWeight: 600 },
+    subHeaderCell: { border: '1px solid #d1d5db', padding: '4px 6px', textAlign: 'center' as const, fontWeight: 500 }
+  };
+
+  // 修复 chartRefs 类型定义：明确为 RefObject<ReactECharts>
+  const renderCommonPanel = (
+    tableData: ProcessedTableData,
+    loading: boolean,
+    chartRefs: {
+      voice: React.RefObject<ReactECharts>,
+      interact: React.RefObject<ReactECharts>,
+      sovArea: React.RefObject<ReactECharts>,
+      soeArea: React.RefObject<ReactECharts>
+    },
+    panelTitle: string
+  ) => {
+    if (loading) {
       return (
-        fields?.['标题'] === '重点品牌声量及互动量表现' &&
-        fields?.['拆分方式'] === '全量数据' &&
-        fields?.['分析指标'] === indicatorType &&
-        fields?.['日期'] === selectedMonth &&
-        !!fields?.['品牌']
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '120px', color: '#64748b' }}>
+          {panelTitle}数据加载中...
+        </div>
       );
-    });
-    return filteredData.map(item => {
-      const value = item.fields?.['值'] || '0%';
-      return {
-        name: item.fields['品牌'] || '', // 防止name为undefined
-        value: Number(value.toString().replace('%', '')) || 0 // 类型安全转换
-      };
-    });
+    }
+    return (
+      <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: '#475569' }}>{panelTitle} 数据表格</span>
+          <button
+            style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0)}
+            onClick={() => copyTableData(tableData, panelTitle)}
+            disabled={loading || tableData.sortedDates.length === 0}
+          >
+            复制完整表格数据到 Excel
+          </button>
+        </div>
+        <div style={tableStyles.container}>
+          <table style={tableStyles.table}>
+            <thead>
+              <tr style={tableStyles.headerRow1}>
+                <th rowSpan={3} style={{ ...tableStyles.headerCell, width: '80px' }}>月份</th>
+                {tableData.brands.map(brand => (
+                  <th key={brand} colSpan={4} style={tableStyles.headerCell}>{brand}</th>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2}>
+                {tableData.brands.map(brand => (
+                  <React.Fragment key={brand}>
+                    <th style={tableStyles.subHeaderCell}>总声量</th>
+                    <th style={tableStyles.subHeaderCell}>SOV</th>
+                    <th style={tableStyles.subHeaderCell}>总互动量</th>
+                    <th style={tableStyles.subHeaderCell}>SOE</th>
+                  </React.Fragment>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2} />
+            </thead>
+            <tbody>
+              {tableData.sortedDates.length > 0 ? (
+                tableData.sortedDates.map(date => (
+                  <tr key={date} style={tableStyles.bodyRow}>
+                    <td style={{ ...tableStyles.cell, fontWeight: 500 }}>{date}</td>
+                    {tableData.brands.map(brand => {
+                      const data = tableData.grouped[date][brand];
+                      return (
+                        <React.Fragment key={brand}>
+                          <td style={tableStyles.cell}>{data.totalVoice}</td>
+                          <td style={{ ...tableStyles.cell, color: data.sov.includes('%') ? '#16a34a' : '#1e293b' }}>{data.sov}</td>
+                          <td style={tableStyles.cell}>{data.totalInteract}</td>
+                          <td style={{ ...tableStyles.cell, color: data.soe.includes('%') ? '#16a34a' : '#1e293b' }}>{data.soe}</td>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={tableData.brands.length * 4 + 1} style={tableStyles.cell}>暂无相关数据</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', gap: '24px', width: '100%' }}>
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  {panelTitle} - 各品牌总声量趋势图
+                </h3>
+                <button
+                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0)}
+                  onClick={() => copyChartData(tableData, 'totalVoice', '总声量', panelTitle)}
+                  disabled={loading || tableData.sortedDates.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={chartRefs.voice}
+                option={getLineChartOption(tableData.sortedDates, tableData.grouped, tableData.brands, 'totalVoice', '总声量')}
+                style={{ height: '340px' }}
+              />
+            </div>
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  {panelTitle} - 各品牌总互动量趋势图
+                </h3>
+                <button
+                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0)}
+                  onClick={() => copyChartData(tableData, 'totalInteract', '总互动量', panelTitle)}
+                  disabled={loading || tableData.sortedDates.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={chartRefs.interact}
+                option={getLineChartOption(tableData.sortedDates, tableData.grouped, tableData.brands, 'totalInteract', '总互动量')}
+                style={{ height: '340px' }}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '24px', width: '100%' }}>
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  {panelTitle} - 各品牌 SOV 份额
+                </h3>
+                <button
+                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0)}
+                  onClick={() => copyChartData(tableData, 'sov', 'SOV', panelTitle)}
+                  disabled={loading || tableData.sortedDates.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={chartRefs.sovArea}
+                option={getAreaChartOption(tableData.sortedDates, tableData.grouped, tableData.brands, 'sov', 'SOV（%）')}
+                style={{ height: '340px' }}
+              />
+            </div>
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  {panelTitle} - 各品牌 SOE 份额
+                </h3>
+                <button
+                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0)}
+                  onClick={() => copyChartData(tableData, 'soe', 'SOE', panelTitle)}
+                  disabled={loading || tableData.sortedDates.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={chartRefs.soeArea}
+                option={getAreaChartOption(tableData.sortedDates, tableData.grouped, tableData.brands, 'soe', 'SOE（%）')}
+                style={{ height: '340px' }}
+              />
+            </div>
+          </div>
+        </div>
+      </>
+    );
   };
 
-  // 给函数添加返回值类型
-  const formatSplitBarData = (): BarData => {
-    if (rawData.length === 0) return { brands: [], totalVoice: [], totalInteract: [] };
-    const baseFiltered = rawData.filter(item => {
-      const fields = item.fields;
+  const renderPlatformPanel = () => {
+    if (platformLoading) {
       return (
-        fields?.['标题'] === '重点品牌声量及互动量表现' &&
-        fields?.['拆分方式'] === '全量数据' &&
-        fields?.['日期'] === selectedMonth &&
-        !!fields?.['品牌'] &&
-        !!fields?.['值']
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '120px', color: '#64748b' }}>
+          平台分布数据加载中...
+        </div>
       );
-    });
-    const brands = [...new Set(baseFiltered.map(item => item.fields['品牌'] || ''))].filter(Boolean);
-    const totalVoice: number[] = [];
-    const totalInteract: number[] = [];
+    }
+    return (
+      <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: '#475569' }}>
+            平台分布数据表格（{selectedMonth}）
+          </span>
+          <button
+            style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0)}
+            onClick={() => copyPlatformData(platformTableData)}
+            disabled={platformLoading || platformTableData.platforms.length === 0}
+          >
+            复制完整平台数据到 Excel
+          </button>
+        </div>
+        <div style={tableStyles.container}>
+          <table style={tableStyles.table}>
+            <thead>
+              <tr style={tableStyles.headerRow1}>
+                <th rowSpan={3} style={{ ...tableStyles.headerCell, width: '100px' }}>平台</th>
+                {platformTableData.brands.map(brand => (
+                  <th key={brand} colSpan={4} style={tableStyles.headerCell}>{brand}</th>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2}>
+                {platformTableData.brands.map(brand => (
+                  <React.Fragment key={brand}>
+                    <th style={tableStyles.subHeaderCell}>总声量</th>
+                    <th style={tableStyles.subHeaderCell}>SOV</th>
+                    <th style={tableStyles.subHeaderCell}>总互动量</th>
+                    <th style={tableStyles.subHeaderCell}>SOE</th>
+                  </React.Fragment>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2} />
+            </thead>
+            <tbody>
+              {platformTableData.platforms.length > 0 ? (
+                platformTableData.platforms.map(platform => (
+                  <tr key={platform} style={tableStyles.bodyRow}>
+                    <td style={{ ...tableStyles.cell, fontWeight: 500 }}>{platform}</td>
+                    {platformTableData.brands.map(brand => {
+                      const data = platformTableData.grouped[platform]?.[brand] || { totalVoice: '-', sov: '-', totalInteract: '-', soe: '-' };
+                      return (
+                        <React.Fragment key={brand}>
+                          <td style={tableStyles.cell}>{data.totalVoice}</td>
+                          <td style={{ ...tableStyles.cell, color: data.sov.includes('%') ? '#16a34a' : '#1e293b' }}>{data.sov}</td>
+                          <td style={tableStyles.cell}>{data.totalInteract}</td>
+                          <td style={{ ...tableStyles.cell, color: data.soe.includes('%') ? '#16a34a' : '#1e293b' }}>{data.soe}</td>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={platformTableData.brands.length * 4 + 1} style={tableStyles.cell}>暂无相关数据</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-    brands.forEach(brand => {
-      const voiceItem = baseFiltered.find(item =>
-        item.fields['品牌'] === brand && item.fields['分析指标'] === '总声量'
-      );
-      const interactItem = baseFiltered.find(item =>
-        item.fields['品牌'] === brand && item.fields['分析指标'] === '总互动量'
-      );
+        <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', gap: '24px', width: '100%' }}>
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  平台分布 - 各品牌总声量
+                </h3>
+                <button
+                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0)}
+                  onClick={() => copyPlatformChartData(platformTableData, 'totalVoice', '总声量')}
+                  disabled={platformLoading || platformTableData.platforms.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={platformVoiceChartRef}
+                option={getPlatformChartOption(
+                  platformTableData.platforms,
+                  platformTableData.grouped,
+                  platformTableData.brands,
+                  'totalVoice',
+                  '总声量',
+                  false
+                )}
+                style={{ height: '340px' }}
+              />
+            </div>
 
-      // 类型安全转换
-      const voiceValueStr = voiceItem?.fields['值']?.toString() || '0';
-      const interactValueStr = interactItem?.fields['值']?.toString() || '0';
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  平台分布 - 各品牌总互动量
+                </h3>
+                <button
+                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0)}
+                  onClick={() => copyPlatformChartData(platformTableData, 'totalInteract', '总互动量')}
+                  disabled={platformLoading || platformTableData.platforms.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={platformInteractChartRef}
+                option={getPlatformChartOption(
+                  platformTableData.platforms,
+                  platformTableData.grouped,
+                  platformTableData.brands,
+                  'totalInteract',
+                  '总互动量',
+                  false
+                )}
+                style={{ height: '340px' }}
+              />
+            </div>
+          </div>
 
-      const voiceValue = Number(voiceValueStr.replace(/[%|,]/g, '')) || 0;
-      const interactValue = Number(interactValueStr.replace(/[%|,]/g, '')) || 0;
+          <div style={{ display: 'flex', gap: '24px', width: '100%' }}>
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  平台分布 - 各品牌 SOV 份额
+                </h3>
+                <button
+                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0)}
+                  onClick={() => copyPlatformChartData(platformTableData, 'sov', 'SOV')}
+                  disabled={platformLoading || platformTableData.platforms.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={platformSovChartRef}
+                option={getPlatformChartOption(
+                  platformTableData.platforms,
+                  platformTableData.grouped,
+                  platformTableData.brands,
+                  'sov',
+                  'SOV（%）',
+                  true
+                )}
+                style={{ height: '340px' }}
+              />
+            </div>
 
-      totalVoice.push(voiceValue);
-      totalInteract.push(interactValue);
-    });
-
-    return { brands, totalVoice, totalInteract };
+            <div style={{ flex: 1, borderRadius: '8px', padding: '16px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '400px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', margin: 0, paddingBottom: '8px' }}>
+                  平台分布 - 各品牌 SOE 份额
+                </h3>
+                <button
+                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0)}
+                  onClick={() => copyPlatformChartData(platformTableData, 'soe', 'SOE')}
+                  disabled={platformLoading || platformTableData.platforms.length === 0}
+                >
+                  复制数据
+                </button>
+              </div>
+              <ReactECharts
+                ref={platformSoeChartRef}
+                option={getPlatformChartOption(
+                  platformTableData.platforms,
+                  platformTableData.grouped,
+                  platformTableData.brands,
+                  'soe',
+                  'SOE（%）',
+                  true
+                )}
+                style={{ height: '340px' }}
+              />
+            </div>
+          </div>
+        </div>
+      </>
+    );
   };
-
-  // 1-12月完整月份列表
-  const fullMonthList = [
-    'Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25', 'Jun-25',
-    'Jul-25', 'Aug-25', 'Sep-25', 'Oct-25', 'Nov-25', 'Dec-25'
-  ];
-  const monthSortMap = Object.fromEntries(fullMonthList.map((month, index) => [month, index + 1]));
-  const allMonthOptions = fullMonthList.sort((a, b) => monthSortMap[a] - monthSortMap[b]);
-
-  // 给函数参数和返回值添加类型
-  const getEchartsPieOption = (indicatorType: string, pieData: PieDataItem[]) => {
-    const colorPalette = [
-      '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
-      '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#596164'
-    ];
-    return {
-      title: {
-        text: `重点品牌${indicatorType}值分布（全量数据）`,
-        left: 'center',
-        top: 15,
-        textStyle: {
-          fontSize: 15,
-          fontWeight: 600,
-          color: '#1e293b',
-          fontFamily: 'Inter, sans-serif'
-        }
-      },
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c}% ({d}%)',
-        textStyle: { fontSize: 13 },
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        borderColor: '#e2e8f0',
-        borderWidth: 1,
-        borderRadius: 8,
-        padding: 10,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      },
-      legend: {
-        orient: 'horizontal',
-        left: 'center',
-        bottom: 15,
-        textStyle: {
-          fontSize: 13,
-          color: '#475569',
-          fontFamily: 'Inter, sans-serif'
-        },
-        itemGap: 18,
-        itemWidth: 14,
-        itemHeight: 14,
-        padding: [0, 0, 5, 0]
-      },
-      series: [
-        {
-          name: `${indicatorType}值`,
-          type: 'pie',
-          radius: ['35%', '60%'],
-          center: ['50%', '42%'],
-          data: pieData,
-          label: { show: false },
-          labelLine: { show: false },
-          color: colorPalette,
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.2)'
-            }
-          }
-        }
-      ],
-      animationDuration: 1000,
-      animationEasing: 'cubicOut'
-    };
-  };
-
-  // 给函数参数添加类型
-  const getEchartsSingleBarOption = (title: string, brands: string[], values: number[], color: string) => {
-    return {
-      title: {
-        text: `${title}分布（全量数据·${selectedMonth}）`,
-        left: 'center',
-        top: 15,
-        textStyle: {
-          fontSize: 15,
-          fontWeight: 600,
-          color: '#1e293b',
-          fontFamily: 'Inter, sans-serif'
-        },
-        align: 'center'
-      },
-      tooltip: {
-        trigger: 'axis',
-        formatter: '{b}：{c}',
-        textStyle: { fontSize: 13 },
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        borderColor: '#e2e8f0',
-        borderWidth: 1,
-        borderRadius: 8,
-        padding: 10,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        axisPointer: {
-          type: 'shadow',
-          shadowStyle: {
-            color: 'rgba(84, 112, 198, 0.1)'
-          }
-        }
-      },
-      xAxis: {
-        type: 'category',
-        data: brands,
-        axisLabel: {
-          fontSize: 13,
-          fontWeight: 500,
-          rotate: 30,
-          interval: 0,
-          color: '#475569'
-        },
-        axisLine: {
-          lineStyle: {
-            color: '#e2e8f0',
-            width: 1
-          }
-        },
-        axisTick: {
-          alignWithLabel: true,
-          lineStyle: { color: '#e2e8f0' }
-        },
-        splitLine: { show: false }
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: {
-          fontSize: 13,
-          color: '#475569'
-        },
-        axisLine: {
-          lineStyle: {
-            color: '#e2e8f0',
-            width: 1
-          }
-        },
-        splitLine: {
-          lineStyle: {
-            color: '#f1f5f9',
-            width: 1
-          }
-        },
-        name: '数值',
-        nameTextStyle: {
-          fontSize: 13,
-          color: '#475569'
-        },
-        nameGap: 15
-      },
-      grid: {
-        left: '8%',
-        right: '8%',
-        bottom: '12%',
-        top: '22%',
-        containLabel: true
-      },
-      series: [
-        {
-          name: title,
-          type: 'bar',
-          data: values,
-          barWidth: '45%',
-          itemStyle: {
-            color: color,
-            borderRadius: [6, 6, 0, 0],
-            shadowColor: 'rgba(84, 112, 198, 0.15)',
-            shadowBlur: 6,
-            shadowOffsetY: 2
-          },
-          label: {
-            show: true,
-            position: 'top',
-            fontSize: 12,
-            color: '#1e293b',
-            fontWeight: 500,
-            fontFamily: 'Inter, sans-serif'
-          },
-          emphasis: {
-            itemStyle: {
-              color: color,
-              opacity: 0.9
-            }
-          }
-        }
-      ],
-      animationDuration: 1000,
-      animationEasing: 'cubicOut'
-    };
-  };
-
-  // 监听数据/月份变化
-  useEffect(() => {
-    if (rawData.length === 0) return;
-    setSovPieData(formatPieData('SOV'));
-    setSoePieData(formatPieData('SOE'));
-    setBarData(formatSplitBarData());
-  }, [rawData, selectedMonth]);
-
-  // 给组件添加props类型
-  interface LoadingSkeletonProps {
-    text: string;
-  }
-  const LoadingSkeleton = ({ text }: LoadingSkeletonProps) => (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      height: '100%',
-      gap: '12px'
-    }}>
-      <div style={{
-        width: '40px',
-        height: '40px',
-        border: '3px solid #e2e8f0',
-        borderTop: '3px solid #5470c6',
-        borderRadius: '50%',
-        animation: 'spin 1s linear infinite'
-      }}></div>
-      <span style={{
-        fontSize: 14,
-        color: '#64748b',
-        fontWeight: 500
-      }}>{text}</span>
-      <style jsx global>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
-
-  // 给组件添加props类型
-  interface EmptyDataTipProps {
-    text: string;
-  }
-  const EmptyDataTip = ({ text }: EmptyDataTipProps) => (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      height: '100%',
-      gap: '12px',
-      color: '#64748b'
-    }}>
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M8 12L12 16L16 12" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M12 8V16" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-      <span style={{
-        fontSize: 14,
-        fontWeight: 500
-      }}>{text}</span>
-    </div>
-  );
 
   return (
-    <div className={styles.chartContainer} style={{
-      width: '100%',
-      minHeight: '100vh',
-      padding: '24px',
-      display: 'flex',
-      flexDirection: 'column',
-      boxSizing: 'border-box',
-      background: '#f8fafc',
-      fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
-    }}>
-      {/* 页面标题 + 月份选择器 */}
+    <div style={{ padding: '24px', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
+      {/* 顶部标题 + 刷新按钮 */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        minHeight: '60px',
-        padding: '12px 20px',
-        marginBottom: '20px',
-        background: 'linear-gradient(135deg, #ffffff 0%, #fafafa 100%)',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+        marginBottom: '20px'
       }}>
-        <h2 style={{
-          margin: 0,
-          fontSize: 18,
-          fontWeight: 600,
-          color: '#1e293b',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21 12V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V12" stroke="#5470c6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M23 10V6C23 5.46957 22.7893 4.96086 22.4142 4.58579C22.0391 4.21071 21.5304 4 21 4H16L12 1L8 4H3C2.46957 4 1.96086 4.21071 1.58579 4.58579C1.21071 4.96086 1 5.46957 1 6V10" stroke="#5470c6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          重点品牌声量及互动量分析
+        <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#1e293b', margin: 0 }}>
+          重点品牌声量互动分析看板
         </h2>
+        <button
+          onClick={handleRefresh}
+          style={{
+            padding: '8px 16px',
+            fontSize: '14px',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            backgroundColor: '#fff',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = '#f1f5f9';
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = '#fff';
+          }}
+        >
+          刷新数据
+        </button>
+      </div>
 
+      {/* 复制成功提示 */}
+      {copySuccess && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          padding: '12px 16px',
+          backgroundColor: '#16a34a',
+          color: '#fff',
+          borderRadius: '8px',
+          fontSize: '14px',
+          zIndex: 9999,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+        }}>
+          {copySuccess}
+        </div>
+      )}
+
+      {/* 主标签页 */}
+      <div style={{
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '24px',
+        borderBottom: '1px solid #e2e8f0',
+        paddingBottom: '12px'
+      }}>
+        {mainTabConfig.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveMainTab(tab.key as MainTabType)}
+            style={{
+              padding: '10px 20px',
+              fontSize: '14px',
+              fontWeight: activeMainTab === tab.key ? 600 : 400,
+              border: 'none',
+              borderRadius: '8px',
+              backgroundColor: activeMainTab === tab.key ? '#1890ff' : '#fff',
+              color: activeMainTab === tab.key ? '#fff' : '#475569',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 子标签页 */}
+      {(activeMainTab === 'hcpNonHcp' || activeMainTab === 'kolUgc') && (
         <div style={{
           display: 'flex',
           gap: '12px',
-          alignItems: 'center'
+          marginBottom: '24px'
         }}>
-          <span style={{
-            fontSize: 14,
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            color: '#475569'
-          }}>选择月份：</span>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            style={{
-              padding: '10px 20px',
-              minWidth: '140px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              backgroundColor: '#ffffff',
-              color: '#1e293b',
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              WebkitAppearance: 'none',
-              MozAppearance: 'none',
-              appearance: 'none',
-              backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748b%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 12px center',
-              backgroundSize: '14px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-            }}
-            onMouseOver={(e) => {
-              // 修复：将e.target断言为HTMLSelectElement
-              const target = e.target as HTMLSelectElement;
-              target.style.borderColor = '#5470c6';
-              target.style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
-            }}
-            onMouseOut={(e) => {
-              // 修复：将e.target断言为HTMLSelectElement
-              const target = e.target as HTMLSelectElement;
-              target.style.borderColor = '#e2e8f0';
-              target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
-            }}
-          >
-            {allMonthOptions.map(month => (
-              <option
-                key={month}
-                value={month}
-                style={{
-                  padding: '10px 16px',
-                  fontSize: 14,
-                  color: '#1e293b',
-                  backgroundColor: '#ffffff',
-                  fontWeight: 500
-                }}
-              >
-                {month}
-              </option>
-            ))}
-          </select>
+          {subTabConfigs[activeMainTab].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveSubTab(tab.key)}
+              style={{
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: activeSubTab === tab.key ? 600 : 400,
+                border: '1px solid',
+                borderColor: activeSubTab === tab.key ? '#1890ff' : '#e2e8f0',
+                borderRadius: '8px',
+                backgroundColor: activeSubTab === tab.key ? '#e6f7ff' : '#fff',
+                color: activeSubTab === tab.key ? '#1890ff' : '#475569',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* 饼图区域 */}
-      <div style={CHART_STYLE_CONFIG.parent}>
-        <div
-          style={chartContainerStyle}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          {loading ? (
-            <LoadingSkeleton text="SOV数据加载中..." />
-          ) : sovPieData.length === 0 ? (
-            <EmptyDataTip text="当前月份无有效SOV数据" />
-          ) : (
-            <ReactECharts
-              ref={sovChartRef}
-              option={getEchartsPieOption('SOV', sovPieData)}
-              style={{ width: '100%', height: '100%' }}
-              onEvents={{ resize: () => sovChartRef.current?.getEchartsInstance().resize() }}
-            />
-          )}
-        </div>
+      {/* 内容渲染 */}
+      {activeMainTab === 'kpiOverview' && renderCommonPanel(
+        kpiTableData,
+        kpiLoading,
+        {
+          voice: kpiVoiceChartRef,
+          interact: kpiInteractChartRef,
+          sovArea: kpiSovAreaChartRef,
+          soeArea: kpiSoeAreaChartRef
+        },
+        'KPI总览'
+      )}
 
-        <div
-          style={chartContainerStyle}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          {loading ? (
-            <LoadingSkeleton text="SOE数据加载中..." />
-          ) : soePieData.length === 0 ? (
-            <EmptyDataTip text="当前月份无有效SOE数据" />
-          ) : (
-            <ReactECharts
-              ref={soeChartRef}
-              option={getEchartsPieOption('SOE', soePieData)}
-              style={{ width: '100%', height: '100%' }}
-              onEvents={{ resize: () => soeChartRef.current?.getEchartsInstance().resize() }}
-            />
-          )}
-        </div>
-      </div>
+      {activeMainTab === 'hcpNonHcp' && activeSubTab === 'hcp' && renderCommonPanel(
+        hcpTableData,
+        hcpLoading,
+        {
+          voice: hcpVoiceChartRef,
+          interact: hcpInteractChartRef,
+          sovArea: hcpSovAreaChartRef,
+          soeArea: hcpSoeAreaChartRef
+        },
+        'HCP'
+      )}
 
-      {/* 柱状图区域 */}
-      <div style={CHART_STYLE_CONFIG.parent}>
-        <div
-          style={chartContainerStyle}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          {loading ? (
-            <LoadingSkeleton text="总声量数据加载中..." />
-          ) : barData.brands.length === 0 ? (
-            <EmptyDataTip text="当前月份无有效总声量数据" />
-          ) : (
-            <ReactECharts
-              ref={voiceBarChartRef}
-              option={getEchartsSingleBarOption(
-                '重点品牌总声量',
-                barData.brands,
-                barData.totalVoice,
-                '#5470c6'
-              )}
-              style={{ width: '100%', height: '100%' }}
-              onEvents={{ resize: () => voiceBarChartRef.current?.getEchartsInstance().resize() }}
-            />
-          )}
-        </div>
+            {activeMainTab === 'hcpNonHcp' && activeSubTab === 'nonHcp' && renderCommonPanel(
+        nonHcpTableData,
+        nonHcpLoading,
+        {
+          voice: nonHcpVoiceChartRef,
+          interact: nonHcpInteractChartRef,
+          sovArea: nonHcpSovAreaChartRef,
+          soeArea: nonHcpSoeAreaChartRef
+        },
+        'NON-HCP'
+      )}
 
-        <div
-          style={chartContainerStyle}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          {loading ? (
-            <LoadingSkeleton text="总互动量数据加载中..." />
-          ) : barData.brands.length === 0 ? (
-            <EmptyDataTip text="当前月份无有效总互动量数据" />
-          ) : (
-            <ReactECharts
-              ref={interactBarChartRef}
-              option={getEchartsSingleBarOption(
-                '重点品牌总互动量',
-                barData.brands,
-                barData.totalInteract,
-                '#91cc75'
-              )}
-              style={{ width: '100%', height: '100%' }}
-              onEvents={{ resize: () => interactBarChartRef.current?.getEchartsInstance().resize() }}
-            />
-          )}
-        </div>
-      </div>
+      {activeMainTab === 'kolUgc' && activeSubTab === 'kol' && renderCommonPanel(
+        kolTableData,
+        kolLoading,
+        {
+          voice: kolVoiceChartRef,
+          interact: kolInteractChartRef,
+          sovArea: kolSovAreaChartRef,
+          soeArea: kolSoeAreaChartRef
+        },
+        'KOL'
+      )}
+
+      {activeMainTab === 'kolUgc' && activeSubTab === 'ugc' && renderCommonPanel(
+        ugcTableData,
+        ugcLoading,
+        {
+          voice: ugcVoiceChartRef,
+          interact: ugcInteractChartRef,
+          sovArea: ugcSovAreaChartRef,
+          soeArea: ugcSoeAreaChartRef
+        },
+        'UGC'
+      )}
+
+      {activeMainTab === 'kolUgc' && activeSubTab === 'koc' && renderCommonPanel(
+        kocTableData,
+        kocLoading,
+        {
+          voice: kocVoiceChartRef,
+          interact: kocInteractChartRef,
+          sovArea: kocSovAreaChartRef,
+          soeArea: kocSoeAreaChartRef
+        },
+        'KOC'
+      )}
+
+      {activeMainTab === 'voicePlatformDistribution' && renderPlatformPanel()}
+
+      {/* 兜底空面板 */}
+      {!['kpiOverview', 'hcpNonHcp', 'kolUgc', 'voicePlatformDistribution'].includes(activeMainTab) && (
+        <EmptyPanel title="暂无数据" subTitle="请选择有效的数据分类标签" />
+      )}
     </div>
   );
 }
