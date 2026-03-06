@@ -1,12 +1,22 @@
 'use client'
+import React, { useRef, useEffect } from 'react';
 import Link from 'next/link';
 import "./globals.css";
 import { usePathname } from 'next/navigation';
-import type { MouseEvent, CSSProperties } from 'react';
-// 导入月份上下文（仅新增这一行）
+import type { MouseEvent as ReactMouseEvent, CSSProperties } from 'react'; // 修改：重命名避免冲突
 import { MonthProvider, useMonthContext } from './context/MonthContext';
 
-// 定义全局样式常量（完全保留原有样式）
+const monthAbbrMap = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+const monthFullNameMap = {
+  'Jan': '1月', 'Feb': '2月', 'Mar': '3月', 'Apr': '4月',
+  'May': '5月', 'Jun': '6月', 'Jul': '7月', 'Aug': '8月',
+  'Sep': '9月', 'Oct': '10月', 'Nov': '11月', 'Dec': '12月'
+};
+
 const STYLE_CONST = {
   colors: {
     primary: '#2D5AF1',
@@ -52,22 +62,248 @@ const STYLE_CONST = {
   }
 };
 
-// 提取布局内容到内部组件（仅新增 useMonthContext 调用）
+const generateYearList = (startYear = 2000, endYear = 2099) => {
+  return Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
+};
+
+const generateMonthsByYear = (year: number) => {
+  const yearSuffix = year.toString().slice(-2);
+  return monthAbbrMap.map(abbr => `${abbr}-${yearSuffix}`);
+};
+
 const LayoutContent = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
-  // 仅新增这一行：获取全局月份上下文
   const { selectedMonth, setSelectedMonth, allMonthOptions } = useMonthContext();
-  console.log('当前路由：', pathname);
 
-  // 🔥 完全保留原有所有方法，一行不改
-  const handleAnchorClick = (e: MouseEvent<HTMLAnchorElement>, targetId: string) => {
+  // 解析初始年份和月份
+  const [selectedYear, setSelectedYear] = React.useState<number>(() => {
+    const yearSuffix = selectedMonth.split('-')[1];
+    return 2000 + Number(yearSuffix);
+  });
+
+  const [selectedMonthAbbr, setSelectedMonthAbbr] = React.useState<string>(() => {
+    return selectedMonth.split('-')[0];
+  });
+
+  // 控制选择器展开/收起状态
+  const [isYearExpanded, setIsYearExpanded] = React.useState(false);
+  const [isMonthExpanded, setIsMonthExpanded] = React.useState(false);
+
+  // 创建ref用于标识选择器容器
+  const yearSelectorRef = useRef<HTMLDivElement>(null);
+  const monthSelectorRef = useRef<HTMLDivElement>(null);
+  const timeSelectorContainerRef = useRef<HTMLDivElement>(null);
+
+  // 年份和月份列表ref
+  const yearListRef = useRef<HTMLDivElement>(null);
+  const monthListRef = useRef<HTMLDivElement>(null);
+
+  // 滚动防抖计时器
+  const yearScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const monthScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const currentYearMonths = generateMonthsByYear(selectedYear);
+
+  // ========== 点击外部区域关闭选择器 ==========
+  useEffect(() => {
+    // 修改1：使用原生 MouseEvent 类型，而非 React.MouseEvent
+    const handleClickOutside = (event: MouseEvent) => {
+      // 检查点击是否在时间选择容器外
+      if (timeSelectorContainerRef.current && !timeSelectorContainerRef.current.contains(event.target as Node)) {
+        // 关闭所有展开的选择器
+        setIsYearExpanded(false);
+        setIsMonthExpanded(false);
+      }
+    };
+
+    // 修改2：先转换为 unknown，再转换为 EventListener（TS 推荐的安全转换方式）
+    document.addEventListener('mousedown', handleClickOutside as unknown as EventListener);
+
+    // 清理函数
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside as unknown as EventListener);
+    };
+  }, []);
+
+  // ========== 年份选择器逻辑 ==========
+  const handleYearScroll = () => {
+    if (!yearListRef.current) return;
+
+    if (yearScrollTimerRef.current) {
+      clearTimeout(yearScrollTimerRef.current);
+    }
+
+    yearScrollTimerRef.current = setTimeout(() => {
+      const container = yearListRef.current!;
+      const yearItems = Array.from(container.querySelectorAll('[data-year]')) as HTMLElement[];
+      if (yearItems.length === 0) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const containerCenterY = containerRect.top + containerRect.height / 2;
+
+      let closestItem = yearItems[0];
+      let minDistance = Infinity;
+
+      yearItems.forEach(item => {
+        const itemRect = item.getBoundingClientRect();
+        const itemCenterY = itemRect.top + itemRect.height / 2;
+        const distance = Math.abs(itemCenterY - containerCenterY);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestItem = item;
+        }
+      });
+
+      closestItem.scrollIntoView({
+        block: 'center',
+        behavior: 'smooth'
+      });
+    }, 300);
+  };
+
+  const scrollToSelectedYear = () => {
+    if (!yearListRef.current || !isYearExpanded) return;
+
+    requestAnimationFrame(() => {
+      const currentYearEl = yearListRef.current!.querySelector(`[data-year="${selectedYear}"]`);
+      if (currentYearEl) {
+        yearListRef.current!.scrollTop = 0;
+
+        const itemRect = currentYearEl.getBoundingClientRect();
+        const containerRect = yearListRef.current!.getBoundingClientRect();
+        const scrollOffset = itemRect.top - containerRect.top - (containerRect.height - itemRect.height) / 2;
+
+        yearListRef.current!.scrollTo({
+          top: yearListRef.current!.scrollTop + scrollOffset,
+          behavior: 'smooth'
+        });
+      }
+    });
+  };
+
+  // 监听年份展开状态，展开时滚动到选中项
+  useEffect(() => {
+    if (isYearExpanded) {
+      const timer = setTimeout(() => {
+        scrollToSelectedYear();
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isYearExpanded, selectedYear]);
+
+  useEffect(() => {
+    const container = yearListRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleYearScroll);
+      return () => {
+        container.removeEventListener('scroll', handleYearScroll);
+        if (yearScrollTimerRef.current) clearTimeout(yearScrollTimerRef.current);
+      };
+    }
+  }, []);
+
+  const handleYearSelect = (year: number) => {
+    setSelectedYear(year);
+    // 更新月份列表并保持当前选中的月份缩写
+    const newMonthValue = `${selectedMonthAbbr}-${year.toString().slice(-2)}`;
+    setSelectedMonth(newMonthValue);
+    setIsYearExpanded(false);
+  };
+
+  // ========== 月份选择器逻辑 ==========
+  const handleMonthScroll = () => {
+    if (!monthListRef.current) return;
+
+    if (monthScrollTimerRef.current) {
+      clearTimeout(monthScrollTimerRef.current);
+    }
+
+    monthScrollTimerRef.current = setTimeout(() => {
+      const container = monthListRef.current!;
+      const monthItems = Array.from(container.querySelectorAll('[data-month]')) as HTMLElement[];
+      if (monthItems.length === 0) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const containerCenterY = containerRect.top + containerRect.height / 2;
+
+      let closestItem = monthItems[0];
+      let minDistance = Infinity;
+
+      monthItems.forEach(item => {
+        const itemRect = item.getBoundingClientRect();
+        const itemCenterY = itemRect.top + itemRect.height / 2;
+        const distance = Math.abs(itemCenterY - containerCenterY);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestItem = item;
+        }
+      });
+
+      closestItem.scrollIntoView({
+        block: 'center',
+        behavior: 'smooth'
+      });
+    }, 300);
+  };
+
+  const scrollToSelectedMonth = () => {
+    if (!monthListRef.current || !isMonthExpanded) return;
+
+    requestAnimationFrame(() => {
+      const currentMonthEl = monthListRef.current!.querySelector(`[data-month="${selectedMonthAbbr}"]`);
+      if (currentMonthEl) {
+        monthListRef.current!.scrollTop = 0;
+
+        const itemRect = currentMonthEl.getBoundingClientRect();
+        const containerRect = monthListRef.current!.getBoundingClientRect();
+        const scrollOffset = itemRect.top - containerRect.top - (containerRect.height - itemRect.height) / 2;
+
+        monthListRef.current!.scrollTo({
+          top: monthListRef.current!.scrollTop + scrollOffset,
+          behavior: 'smooth'
+        });
+      }
+    });
+  };
+
+  // 监听月份展开状态，展开时滚动到选中项
+  useEffect(() => {
+    if (isMonthExpanded) {
+      const timer = setTimeout(() => {
+        scrollToSelectedMonth();
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isMonthExpanded, selectedMonthAbbr]);
+
+  useEffect(() => {
+    const container = monthListRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleMonthScroll);
+      return () => {
+        container.removeEventListener('scroll', handleMonthScroll);
+        if (monthScrollTimerRef.current) clearTimeout(monthScrollTimerRef.current);
+      };
+    }
+  }, []);
+
+  const handleMonthSelect = (monthAbbr: string) => {
+    setSelectedMonthAbbr(monthAbbr);
+    const newMonthValue = `${monthAbbr}-${selectedYear.toString().slice(-2)}`;
+    setSelectedMonth(newMonthValue);
+    setIsMonthExpanded(false);
+  };
+
+  // ========== 其他通用逻辑 ==========
+  const handleAnchorClick = (e: ReactMouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
     const targetElement = document.getElementById(targetId);
     if (targetElement) {
-      targetElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       targetElement.classList.add('anchor-highlight');
       setTimeout(() => targetElement.classList.remove('anchor-highlight'), 1500);
     }
@@ -98,7 +334,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
       boxShadow: 'none',
       borderLeft: 'none'
     };
-
     return isActive ? { ...baseStyle, ...activeStyle } : baseStyle;
   };
 
@@ -115,7 +350,7 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
     margin: 0
   });
 
-  const handleNavItemHover = (e: MouseEvent<HTMLDivElement>, path: string, isChild = false) => {
+  const handleNavItemHover = (e: ReactMouseEvent<HTMLDivElement>, path: string, isChild = false) => {
     const isActive = pathname === path;
     if (isActive) {
       e.currentTarget.style.backgroundColor = STYLE_CONST.colors.primaryBg;
@@ -126,7 +361,7 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const handleNavItemLeave = (e: MouseEvent<HTMLDivElement>, path: string, isChild = false) => {
+  const handleNavItemLeave = (e: ReactMouseEvent<HTMLDivElement>, path: string, isChild = false) => {
     const isActive = pathname === path;
     if (isActive) {
       e.currentTarget.style.backgroundColor = STYLE_CONST.colors.primaryBg;
@@ -146,7 +381,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
       fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
     } as CSSProperties}>
 
-      {/* 头部区域 - 仅在原有结构中新增月份筛选器，样式完全保留 */}
       <div className="header-left" style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -181,75 +415,245 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
           迪敏思KPI dashboard
         </h1>
 
-        {/* 🔥 仅新增这一块：月份筛选器（样式匹配原有设计规范） */}
-        <div style={{
-          marginRight:'10px',
-          display: 'flex',
-          gap: '12px',
-          alignItems: 'center',
-
-        }}>
+        {/* 🔥 添加ref标识时间选择容器 */}
+        <div
+          ref={timeSelectorContainerRef}
+          style={{
+            marginRight:'10px',
+            display: 'flex',
+            gap: '12px',
+            alignItems: 'center',
+          }}
+        >
           <span style={{
             fontSize: 14,
             fontWeight: 500,
             whiteSpace: 'nowrap',
             color: '#475569',
-          }}>选择月份：</span>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
+            display: 'flex',
+            alignItems: 'center',
+            height: '48px',
+          }}>选择时间：</span>
+
+          {/* 年份选择器 - 添加ref */}
+          <div
+            ref={yearSelectorRef}
             style={{
-              padding: '10px 20px',
-              minWidth: '140px',
-              border: '1px solid #e2e8f0',
+              position: 'relative',
+              minWidth: '100px',
               borderRadius: '8px',
+              border: '1px solid #e2e8f0',
               backgroundColor: '#ffffff',
-              color: '#1e293b',
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              WebkitAppearance: 'none',
-              MozAppearance: 'none',
-              appearance: 'none',
-              backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748b%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 12px center',
-              backgroundSize: '14px',
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              boxSizing: 'border-box',
+              transition: 'all 0.3s ease',
+              height: isYearExpanded ? '120px' : '48px',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              ...(isYearExpanded ? { alignSelf: 'flex-start' } : { alignSelf: 'center' }),
             }}
+            onClick={() => setIsYearExpanded(!isYearExpanded)}
             onMouseOver={(e) => {
-              e.currentTarget.style.borderColor = '#5470c6';
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
+              (e.currentTarget as HTMLElement).style.borderColor = '#5470c6';
+              (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
             }}
             onMouseOut={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
+              (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0';
+              (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
             }}
           >
-            {allMonthOptions.map(month => (
-              <option
-                key={month}
-                value={month}
-                style={{
-                  padding: '10px 16px',
-                  fontSize: 14,
-                  color: '#1e293b',
-                  backgroundColor: '#ffffff',
-                  fontWeight: 500,
-                }}
-              >
-                {month}
-              </option>
-            ))}
-          </select>
+            <div style={{
+              padding: '10px 20px',
+              fontSize: 14,
+              fontWeight: 500,
+              color: '#2D5AF1',
+              backgroundColor: '#EBF0FF',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              zIndex: 1,
+              position: 'relative',
+              height: '48px',
+              boxSizing: 'border-box',
+              opacity: isYearExpanded ? 0 : 1,
+              visibility: isYearExpanded ? 'hidden' : 'visible',
+              transition: 'opacity 0.2s ease',
+            }}>
+              {selectedYear}年
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" transform={isYearExpanded ? 'rotate(180)' : 'rotate(0)'} />
+              </svg>
+            </div>
+
+            <div
+              ref={yearListRef}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                paddingTop: 0,
+                overflowY: 'auto',
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#e2e8f0 #ffffff',
+                height: '100%',
+                scrollBehavior: 'smooth',
+                overscrollBehavior: 'contain',
+                boxSizing: 'border-box',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {generateYearList(2000, 2099).map((year) => (
+                <div
+                  key={year}
+                  data-year={year}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: year === selectedYear ? '#2D5AF1' : '#1e293b',
+                    backgroundColor: year === selectedYear ? '#EBF0FF' : '#ffffff',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease',
+                    height: '40px',
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems: 'center',
+                    position: 'relative',
+                    left: 0,
+                    top: 0,
+                    width: '100%',
+                  }}
+                  onClick={() => handleYearSelect(year)}
+                  onMouseOver={(e) => {
+                    if (year !== selectedYear) {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#F8F9FA';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (year !== selectedYear) {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#ffffff';
+                    }
+                  }}
+                >
+                  {year}年
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 月份选择器 - 添加ref */}
+          <div
+            ref={monthSelectorRef}
+            style={{
+              position: 'relative',
+              minWidth: '100px',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              backgroundColor: '#ffffff',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              transition: 'all 0.3s ease',
+              height: isMonthExpanded ? '120px' : '48px',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              ...(isMonthExpanded ? { alignSelf: 'flex-start' } : { alignSelf: 'center' }),
+            }}
+            onClick={() => setIsMonthExpanded(!isMonthExpanded)}
+            onMouseOver={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = '#5470c6';
+              (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 3px rgba(84, 112, 198, 0.1)';
+            }}
+            onMouseOut={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0';
+              (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
+            }}
+          >
+            <div style={{
+              padding: '10px 20px',
+              fontSize: 14,
+              fontWeight: 500,
+              color: '#2D5AF1',
+              backgroundColor: '#EBF0FF',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              zIndex: 1,
+              position: 'relative',
+              height: '48px',
+              boxSizing: 'border-box',
+              opacity: isMonthExpanded ? 0 : 1,
+              visibility: isMonthExpanded ? 'hidden' : 'visible',
+              transition: 'opacity 0.2s ease',
+            }}>
+              {monthFullNameMap[selectedMonthAbbr as keyof typeof monthFullNameMap]}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" transform={isMonthExpanded ? 'rotate(180)' : 'rotate(0)'} />
+              </svg>
+            </div>
+
+            <div
+              ref={monthListRef}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                paddingTop: 0,
+                overflowY: 'auto',
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#e2e8f0 #ffffff',
+                height: '100%',
+                scrollBehavior: 'smooth',
+                overscrollBehavior: 'contain',
+                boxSizing: 'border-box',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {monthAbbrMap.map((monthAbbr) => (
+                <div
+                  key={monthAbbr}
+                  data-month={monthAbbr}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: monthAbbr === selectedMonthAbbr ? '#2D5AF1' : '#1e293b',
+                    backgroundColor: monthAbbr === selectedMonthAbbr ? '#EBF0FF' : '#ffffff',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease',
+                    height: '40px',
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems: 'center',
+                    position: 'relative',
+                    left: 0,
+                    top: 0,
+                    width: '100%',
+                  }}
+                  onClick={() => handleMonthSelect(monthAbbr)}
+                  onMouseOver={(e) => {
+                    if (monthAbbr !== selectedMonthAbbr) {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#F8F9FA';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (monthAbbr !== selectedMonthAbbr) {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#ffffff';
+                    }
+                  }}
+                >
+                  {monthFullNameMap[monthAbbr as keyof typeof monthFullNameMap]}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div style={{ width: '80px' }}></div>
       </div>
 
-      {/* 主体容器 - 完全保留原有样式和结构，一行不改 */}
+      {/* 主体容器 - 保持不变 */}
       <div className="dashboard-container" style={{
         display: 'flex',
         gap: STYLE_CONST.spacing.xl,
@@ -257,7 +661,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
         boxSizing: 'border-box'
       } as CSSProperties}>
 
-        {/* 侧边栏 - 完全保留原有样式和内容 */}
         <div className="sidebar" style={{
           width: '240px',
           background: STYLE_CONST.colors.bg.card,
@@ -278,7 +681,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
             e.currentTarget.style.borderColor = STYLE_CONST.colors.border.normal;
           }}>
 
-          {/* 本月总结 */}
           <div
             className="nav-item"
             style={{...getNavItemStyle('/summary'), marginBottom: 0, marginTop: STYLE_CONST.spacing.lg} as CSSProperties}
@@ -302,7 +704,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
             </ul>
           </div>
 
-          {/* 全平台数据 */}
           <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.xs} 0 ${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>全平台数据</h3>
             <div
@@ -351,7 +752,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
             </div>
           </div>
 
-          {/* 抖音平台 */}
           <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>抖音平台</h3>
             <div
@@ -466,7 +866,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
             </div>
           </div>
 
-          {/* 小红书平台 */}
           <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>小红书平台</h3>
             <div
@@ -581,7 +980,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
             </div>
           </div>
 
-          {/* 覆盖范围和定义 */}
           <div className="nav-section" style={{ margin: `${STYLE_CONST.spacing.lg} 0` } as CSSProperties}>
             <h3 className="section-title" style={getSectionTitleStyle()}>覆盖范围和定义</h3>
             <div
@@ -609,7 +1007,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
           </div>
         </div>
 
-        {/* 主内容区 - 完全保留原有样式和结构 */}
         <div className="main-content" style={{
           flex: 1,
           background: STYLE_CONST.colors.bg.card,
@@ -636,7 +1033,6 @@ const LayoutContent = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// 主布局组件 - 仅包裹上下文提供者，其他不变
 export default function MainLayout({
   children,
 }: {

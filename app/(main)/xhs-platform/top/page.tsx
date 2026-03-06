@@ -180,7 +180,7 @@ export default function DouyinPosts() {
     return baseOptions.map(opt => ({
       value: opt,
       label: opt === '全部'
-        ? `全部 (${data.length}条)`
+        ? `分子式 (${data.length}条)`
         : `${opt} (${moleculeStats[opt] || 0}条)`
     }));
   }, [data, moleculeStats]);
@@ -197,7 +197,7 @@ export default function DouyinPosts() {
     return baseOptions.map(opt => ({
       value: opt,
       label: opt === '全部'
-        ? `全部 (${moleculeFilteredData.length}条)` // 显示当前分子式下的总条数
+        ? `达人量级 (${moleculeFilteredData.length}条)` // 显示当前分子式下的总条数
         : `${opt} (${levelStats[opt] || 0}条)` // 显示当前分子式下该量级的条数
     }));
   }, [moleculeFilteredData, levelStats]); // 依赖筛选后的数据集和统计结果

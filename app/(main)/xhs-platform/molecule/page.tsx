@@ -50,27 +50,30 @@ interface ProcessedPlatformData {
 
 // 定义一级标签类型
 type MainTabType = 'kpiOverview' | 'hcpNonHcp' | 'kolUgc' | 'voicePlatformDistribution';
-// 定义二级标签类型 - 保留KOC类型
-type SubTabType = 'hcp' | 'nonHcp' | 'kol' | 'ugc' | 'koc';
+// 🌟 修改：扩展二级标签类型，增加对比面板
+type SubTabType = 'hcp' | 'nonHcp' | 'hcpNonHcpCompare' | 'kol' | 'ugc' | 'kolUgcCompare';
 
 // 一级标签配置
 const mainTabConfig = [
   { key: 'kpiOverview', label: 'KPI总览' },
   { key: 'hcpNonHcp', label: 'HCP/NON-HCP' },
-  { key: 'kolUgc', label: 'KOL/UGC/KOC' },
+  { key: 'kolUgc', label: 'KOL/UGC' },
   //{ key: 'voicePlatformDistribution', label: '声量及互动量平台分布' }
 ];
 
-// 二级标签配置 - 保留KOC选项
+// 🌟 修改：更新二级标签配置，增加HCP/NON-HCP对比选项
 const subTabConfigs = {
   hcpNonHcp: [
+    { key: 'hcpNonHcpCompare' as SubTabType, label: 'HCP/NON-HCP对比' }, // 新增对比面板
     { key: 'hcp' as SubTabType, label: 'HCP' },
-    { key: 'nonHcp' as SubTabType, label: 'NON-HCP' }
+    { key: 'nonHcp' as SubTabType, label: 'NON-HCP' },
+
   ],
   kolUgc: [
+   { key: 'kolUgcCompare' as SubTabType, label: 'KOL/UGC对比' },
     { key: 'kol' as SubTabType, label: 'KOL' },
     { key: 'ugc' as SubTabType, label: 'UGC' },
-    { key: 'koc' as SubTabType, label: 'KOC' } // 保留KOC标签
+
   ]
 };
 
@@ -186,9 +189,9 @@ const getLineChartOption = (
       splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
       name: yAxisName,
       nameTextStyle: { fontSize: 12 },
-      nameRotate: 90,
-      nameLocation: 'middle',
-      nameGap: 30,
+      nameRotate: 0,
+      nameLocation: 'end',
+      nameGap: 13,
       // 确保Y轴从0开始，避免数据失真
       min: 0
     },
@@ -304,9 +307,9 @@ const getAreaChartOption = (
       splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
       name: yAxisName,
       nameTextStyle: { fontSize: 12 },
-      nameRotate: 90,
-      nameLocation: 'middle',
-      nameGap: 30,
+      nameRotate: 0,
+      nameLocation: 'end',
+      nameGap: 13,
       // 百分比Y轴范围0-100
       min: 0,
       max: 100
@@ -317,6 +320,7 @@ const getAreaChartOption = (
 };
 
 // 新增：平台分布专用图表配置函数（改为横向堆叠条形图）
+// 平台分布专用图表配置函数（改为纵向堆叠柱状图，X轴为分子式）
 const getPlatformChartOption = (
   platforms: string[],
   grouped: Record<string, Record<string, MoleculeData>>,
@@ -325,12 +329,16 @@ const getPlatformChartOption = (
   yAxisName: string,
   isPercentage: boolean = false
 ) => {
-  // 为每个分子式构建数据系列
-  const series = molecules.map((mol, index) => {
-    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16'];
-    // 提取该分子式在各平台的对应指标数据
-    const data = platforms.map(platform => {
-      const value = grouped[platform]?.[mol]?.[indicatorType] || '-';
+  // 为每个平台构建数据系列（原逻辑是为每个分子式构建）
+  const series = platforms.map((platform, index) => {
+    const colors = [
+      '#1890ff', '#722ed1', '#f5222d', '#fa8c16',
+      '#36cfc9', '#a0c4ff', '#ffc6ff', '#ffd6a5'
+    ]; // 扩展颜色以适配多平台
+    // 提取该平台在各分子式的对应指标数据
+    const data = molecules.map(molecule => {
+      // 查找该平台下对应分子式的数据
+      const value = grouped[platform]?.[molecule]?.[indicatorType] || '-';
 
       if (value === '-' || value === '' || value === '无' || value === null || value === undefined) {
         return 0;
@@ -349,17 +357,17 @@ const getPlatformChartOption = (
     });
 
     return {
-      name: mol,
-      type: 'bar', // 保持bar类型，通过坐标轴设置实现横向
+      name: platform, // 系列名称改为平台
+      type: 'bar',
       stack: 'total', // 堆叠效果
       data: data,
       itemStyle: {
-        color: colors[index],
-        borderRadius: [0, 4, 4, 0] // 调整圆角方向适配横向
+        color: colors[index % colors.length], // 循环使用颜色
+        borderRadius: [4, 4, 0, 0]
       },
       emphasis: {
         itemStyle: {
-          color: colors[index],
+          color: colors[index % colors.length],
           opacity: 0.8
         }
       }
@@ -392,36 +400,38 @@ const getPlatformChartOption = (
       }
     },
     legend: {
-      data: molecules,
-      textStyle: { fontSize: 11 },
-      right: 19, // 调整图例位置到右侧
-      bottom: 0,
-      orient: 'horizontal' // 图例垂直排列
+      data: platforms, // 图例显示平台名称
+      textStyle: { fontSize: 12 },
+      bottom: 0, // 图例移到顶部
+      left: 'center',
+      orient: 'horizontal'
     },
     grid: {
-      left: '3%', // 留出更多左侧空间给平台标签
-      right: '7%', // 留出右侧空间给图例
-      bottom: '13%',
-      top: '8%',
+      left: '6%',
+      right: '4%',
+      bottom: '20%',
+      top: '10%', // 留出顶部图例空间
       containLabel: true
     },
-    // 关键修改：X轴和Y轴交换配置，实现横向展示
-    yAxis: {
+    // 调整坐标轴配置：X轴显示分子式，Y轴显示数值
+    xAxis: {
       type: 'category',
-      data: platforms, // 平台显示在Y轴（纵向）
+      data: molecules, // 分子式显示在X轴
       axisLabel: {
-        fontSize: 12,
-        align: 'right' // 标签右对齐
+        fontSize: 11,
+        rotate: 0, // 轻微旋转防止文字重叠
+        align: 'center',
+        interval: 0
       },
       axisLine: { lineStyle: { color: '#d1d5db' } },
-      name: '平台',
+      name: '',
       nameTextStyle: { fontSize: 12 },
-      nameRotate: 0, // 横向名称不需要旋转
-      nameLocation: 'end',
-      nameGap: 10
+      nameRotate: 0,
+      nameLocation: 'middle',
+      nameGap: 30
     },
-    xAxis: {
-      type: 'value', // 数值显示在X轴（横向）
+    yAxis: {
+      type: 'value',
       axisLabel: {
         fontSize: 12,
         formatter: isPercentage ? '{value}%' : '{value}'
@@ -430,8 +440,8 @@ const getPlatformChartOption = (
       splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
       name: yAxisName,
       nameTextStyle: { fontSize: 12 },
-      nameRotate: 0,
-      nameLocation: 'middle',
+      nameRotate: 0, // Y轴名称旋转90度
+      nameLocation: 'end',
       nameGap: 20,
       min: 0,
       max: isPercentage ? 100 : undefined
@@ -441,35 +451,737 @@ const getPlatformChartOption = (
   };
 };
 
-// 空面板组件（支持自定义标题和子标题）
-const EmptyPanel: React.FC<{ title: string; subTitle?: string }> = ({ title, subTitle }) => {
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      height: '600px',
-      backgroundColor: '#ffffff',
-      borderRadius: '8px',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-      marginTop: '16px',
-      padding: '24px'
-    }}>
-      <div style={{ fontSize: '20px', color: '#64748b', marginBottom: '8px' }}>
-        📊 {title}
-      </div>
-      {subTitle && (
-        <div style={{ fontSize: '16px', color: '#94a3b8', marginBottom: '16px' }}>
-          {subTitle}
+// 🌟 替换：HCP/NON-HCP对比面板组件
+const HcpNonHcpComparePanel: React.FC<{
+  copyBtnHovered: string | null;
+  setCopyBtnHovered: (key: string | null) => void;
+  setCopySuccess: (msg: string) => void;
+  refreshKey: number;
+  getCopyBtnStyle: (disabled: boolean, btnKey: string) => React.CSSProperties;
+  copyTableData: (tableData: ProcessedTableData, panelName: string) => void;
+  tableStyles: any;
+}> = ({
+  copyBtnHovered,
+  setCopyBtnHovered,
+  setCopySuccess,
+  refreshKey,
+  getCopyBtnStyle,
+  copyTableData,
+  tableStyles
+}) => {
+  // 对比面板专用数据状态
+  const [hcpCompareData, setHcpCompareData] = useState<ProcessedTableData>({
+    grouped: {},
+    sortedDates: [],
+    molecules: []
+  });
+  const [nonHcpCompareData, setNonHcpCompareData] = useState<ProcessedTableData>({
+    grouped: {},
+    sortedDates: [],
+    molecules: []
+  });
+
+  // 加载状态
+  const [hcpLoading, setHcpLoading] = useState(false);
+  const [nonHcpLoading, setNonHcpLoading] = useState(false);
+
+  // 数据处理函数（复用主组件的逻辑）
+  const processTableData = (rawData: RawDataItem[], splitType: string): ProcessedTableData => {
+    const filtered = rawData.filter(item =>
+      item.fields?.['标题'] === '重点分子式声量及互动量表现（红书） ' &&
+      item.fields?.['拆分方式'] === splitType && // 根据传入的拆分方式筛选
+      item.fields?.['分子式']
+    );
+
+    const grouped: Record<string, Record<string, MoleculeData>> = {};
+    const dates = new Set<string>();
+    // 定义标准分子式名称（用于匹配）
+    const standardMolecules = [
+      '氮䓬斯汀氟替卡松',
+      '糠酸莫米松',
+      '布地奈德',
+      '丙酸氟替卡松'
+    ];
+    // 创建名称映射（处理可能的名称变体）
+    const moleculeNameMap: Record<string, string> = {
+      '氮䓬斯汀氟替卡松': '氮䓬斯汀氟替卡松',
+      '糠酸莫米松': '糠酸莫米松',
+      '糠酸莫米松鼻喷雾剂': '糠酸莫米松',
+      '布地奈德': '布地奈德',
+      '布地奈德鼻喷雾剂': '布地奈德',
+      '丙酸氟替卡松': '丙酸氟替卡松',
+      '丙酸氟替卡松鼻喷雾剂': '丙酸氟替卡松'
+    };
+
+    filtered.forEach(item => {
+      const date = item.fields['日期'];
+      let molecule = item.fields['分子式'];
+      const indicator = item.fields['分析指标'];
+      const value = item.fields['值'] || '-';
+
+      if (!date || !molecule) return;
+
+      // 标准化分子式名称并映射到标准名称
+      const normalizedName = normalizeMoleculeName(molecule);
+      // 查找匹配的标准名称
+      const matchedName = moleculeNameMap[normalizedName] ||
+                          Object.entries(moleculeNameMap).find(([key]) =>
+                            normalizedName.includes(key) || key.includes(normalizedName)
+                          )?.[1] ||
+                          normalizedName;
+
+      // 只处理标准列表中的分子式
+      if (!standardMolecules.includes(matchedName)) return;
+
+      if (!grouped[date]) {
+        grouped[date] = {};
+        standardMolecules.forEach(mol => {
+          grouped[date][mol] = { totalVoice: '-', sov: '-', totalInteract: '-', soe: '-' };
+        });
+      }
+
+      dates.add(date);
+
+      // 确保值是有效的（处理百分比、空值等）
+      let processedValue = value;
+      if (processedValue === '' || processedValue === '无') {
+        processedValue = '-';
+      }
+
+      switch (indicator) {
+        case '总声量':
+          grouped[date][matchedName].totalVoice = processedValue;
+          break;
+        case 'SOV':
+          grouped[date][matchedName].sov = processedValue;
+          break;
+        case '总互动量':
+          grouped[date][matchedName].totalInteract = processedValue;
+          break;
+        case 'SOE':
+          grouped[date][matchedName].soe = processedValue;
+          break;
+      }
+    });
+
+    const sortedDates = Array.from(dates).sort((a, b) => {
+      return parseMonthString(a).getTime() - parseMonthString(b).getTime();
+    });
+
+    return { grouped, sortedDates, molecules: standardMolecules };
+  };
+
+  // 加载对比数据
+  useEffect(() => {
+    const fetchCompareData = async () => {
+      try {
+        // 加载HCP数据
+        setHcpLoading(true);
+        const hcpRes = await axios.get('http://localhost:3000/api/feishu/XHSHCP');
+        const hcpProcessed = processTableData(hcpRes.data as RawDataItem[], 'HCP');
+        setHcpCompareData(hcpProcessed);
+
+        // 加载NON-HCP数据
+        setNonHcpLoading(true);
+        const nonHcpRes = await axios.get('http://localhost:3000/api/feishu/XHSNONHCP');
+        const nonHcpProcessed = processTableData(nonHcpRes.data as RawDataItem[], 'NON-HCP');
+        setNonHcpCompareData(nonHcpProcessed);
+      } catch (err) {
+        console.error('对比数据加载失败:', err);
+        setCopySuccess('数据加载失败，请刷新重试');
+        setTimeout(() => setCopySuccess(''), 2000);
+      } finally {
+        setHcpLoading(false);
+        setNonHcpLoading(false);
+      }
+    };
+
+    fetchCompareData();
+  }, [refreshKey]);
+
+  // 渲染单个表格（复用样式）
+  const renderTable = (
+    tableData: ProcessedTableData,
+    loading: boolean,
+    title: string
+  ) => {
+    if (loading) {
+      return (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '120px',
+          color: '#64748b',
+          background: '#fff',
+          borderRadius: '8px',
+          marginBottom: '24px'
+        }}>
+          {title}数据加载中...
         </div>
-      )}
-      <div style={{ fontSize: '16px', color: '#94a3b8' }}>
-        该模块正在开发中，敬请期待...
+      );
+    }
+
+    return (
+      <div style={{ marginBottom: '32px' }}>
+        {/* 表格标题和复制按钮 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: '#475569' }}>{title} 数据表格</span>
+          <button
+            style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `compare-${title}`)}
+            onClick={() => copyTableData(tableData, title)}
+            disabled={loading || tableData.sortedDates.length === 0}
+            onMouseEnter={() => setCopyBtnHovered(`compare-${title}`)}
+            onMouseLeave={() => setCopyBtnHovered(null)}
+          >
+            复制{title}表格数据到 Excel
+          </button>
+        </div>
+
+        {/* 表格内容 - 和HCP/NON-HCP面板样式完全一致 */}
+        <div style={tableStyles.container}>
+          <table style={tableStyles.table}>
+            <thead>
+              <tr style={tableStyles.headerRow1}>
+                <th
+                  rowSpan={3}
+                  style={{ ...tableStyles.headerCell, width: '80px' }}
+                >
+                  月份
+                </th>
+                {tableData.molecules.map(mol => (
+                  <th
+                    key={mol}
+                    colSpan={4}
+                    style={{ ...mol === '氮䓬斯汀氟替卡松' ? tableStyles.diminsiHeaderCell :tableStyles.headerCell, }}
+                  >
+                    {mol}
+                  </th>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2}>
+                {tableData.molecules.map(mol => (
+                  <React.Fragment key={mol}>
+                    <th style={tableStyles.subHeaderCell}>总声量</th>
+                    <th style={tableStyles.subHeaderCell}>SOV</th>
+                    <th style={tableStyles.subHeaderCell}>总互动量</th>
+                    <th style={tableStyles.subHeaderCell}>SOE</th>
+                  </React.Fragment>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2} />
+            </thead>
+            <tbody>
+              {tableData.sortedDates.length > 0 ? (
+                tableData.sortedDates.map(date => (
+                  <tr key={date} style={tableStyles.bodyRow}>
+                    <td style={{ ...tableStyles.cell, fontWeight: 500 }}>{date}</td>
+                    {tableData.molecules.map(mol => {
+                      const data = tableData.grouped[date][mol];
+                      return (
+                        <React.Fragment key={mol}>
+                          <td style={tableStyles.cell}>{data.totalVoice}</td>
+                          <td
+                            style={{
+                              ...tableStyles.cell,
+                              color: data.sov.includes('%') ? '#16a34a' : '#1e293b'
+                            }}
+                          >
+                            {data.sov}
+                          </td>
+                          <td style={tableStyles.cell}>{data.totalInteract}</td>
+                          <td
+                            style={{
+                              ...tableStyles.cell,
+                              color: data.soe.includes('%') ? '#16a34a' : '#1e293b'
+                            }}
+                          >
+                            {data.soe}
+                          </td>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={tableData.molecules.length * 4 + 1} style={tableStyles.cell}>
+                    暂无相关数据
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+    );
+  };
+
+  // 批量复制两个表格数据
+  const copyAllCompareData = () => {
+    if (hcpCompareData.sortedDates.length === 0 || nonHcpCompareData.sortedDates.length === 0) {
+      setCopySuccess('暂无数据可复制');
+      setTimeout(() => setCopySuccess(''), 1500);
+      return;
+    }
+
+    // 构建HCP数据
+    const hcpHeader = ['HCP - 月份'];
+    hcpCompareData.molecules.forEach(mol => {
+      hcpHeader.push(`${mol}-总声量`, `${mol}-SOV`, `${mol}-总互动量`, `${mol}-SOE`);
+    });
+    const hcpLines = [hcpHeader.join('\t')];
+    hcpCompareData.sortedDates.forEach(date => {
+      const row = [date];
+      hcpCompareData.molecules.forEach(mol => {
+        const data = hcpCompareData.grouped[date][mol];
+        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+      });
+      hcpLines.push(row.join('\t'));
+    });
+
+    // 构建NON-HCP数据
+    const nonHcpHeader = ['\nNON-HCP - 月份'];
+    nonHcpCompareData.molecules.forEach(mol => {
+      nonHcpHeader.push(`${mol}-总声量`, `${mol}-SOV`, `${mol}-总互动量`, `${mol}-SOE`);
+    });
+    const nonHcpLines = [nonHcpHeader.join('\t')];
+    nonHcpCompareData.sortedDates.forEach(date => {
+      const row = [date];
+      nonHcpCompareData.molecules.forEach(mol => {
+        const data = nonHcpCompareData.grouped[date][mol];
+        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+      });
+      nonHcpLines.push(row.join('\t'));
+    });
+
+    // 合并并复制
+    const allData = [...hcpLines, ...nonHcpLines].join('\n');
+    navigator.clipboard.writeText(allData).then(() => {
+      setCopySuccess('HCP/NON-HCP对比数据已复制，可粘贴到Excel');
+      setTimeout(() => setCopySuccess(''), 2000);
+    }).catch(() => {
+      setCopySuccess('复制失败，请手动复制');
+      setTimeout(() => setCopySuccess(''), 2000);
+    });
+  };
+
+  return (
+    <div style={{ padding: '8px 0' }}>
+      {/* 对比面板标题和批量复制按钮 */}
+      <div style={{
+        marginBottom: '24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: '16px',
+        borderBottom: '1px solid #e5e7eb'
+      }}>
+        <h2 style={{
+          fontSize: '18px',
+          color: '#1e293b',
+          fontWeight: 600,
+          margin: 0
+        }}>
+          HCP/NON-HCP 数据对比
+        </h2>
+        <button
+          style={getCopyBtnStyle(
+            hcpLoading || nonHcpLoading ||
+            hcpCompareData.sortedDates.length === 0 ||
+            nonHcpCompareData.sortedDates.length === 0,
+            'compare-all'
+          )}
+          onClick={copyAllCompareData}
+          disabled={
+            hcpLoading || nonHcpLoading ||
+            hcpCompareData.sortedDates.length === 0 ||
+            nonHcpCompareData.sortedDates.length === 0
+          }
+          onMouseEnter={() => setCopyBtnHovered('compare-all')}
+          onMouseLeave={() => setCopyBtnHovered(null)}
+        >
+          复制全部对比数据到 Excel
+        </button>
+      </div>
+
+      {/* HCP表格（上） */}
+      {renderTable(hcpCompareData, hcpLoading, 'HCP')}
+
+      {/* NON-HCP表格（下） */}
+      {renderTable(nonHcpCompareData, nonHcpLoading, 'NON-HCP')}
     </div>
   );
 };
+
+
+
+// 🌟 新增：KOL/UGC对比面板组件
+const KolUgcComparePanel: React.FC<{
+  copyBtnHovered: string | null;
+  setCopyBtnHovered: (key: string | null) => void;
+  setCopySuccess: (msg: string) => void;
+  refreshKey: number;
+  getCopyBtnStyle: (disabled: boolean, btnKey: string) => React.CSSProperties;
+  copyTableData: (tableData: ProcessedTableData, panelName: string) => void;
+  tableStyles: any;
+}> = ({
+  copyBtnHovered,
+  setCopyBtnHovered,
+  setCopySuccess,
+  refreshKey,
+  getCopyBtnStyle,
+  copyTableData,
+  tableStyles
+}) => {
+  // 对比面板专用数据状态
+  const [kolCompareData, setKolCompareData] = useState<ProcessedTableData>({
+    grouped: {},
+    sortedDates: [],
+    molecules: []
+  });
+  const [ugcCompareData, setUgcCompareData] = useState<ProcessedTableData>({
+    grouped: {},
+    sortedDates: [],
+    molecules: []
+  });
+
+  // 加载状态
+  const [kolLoading, setKolLoading] = useState(false);
+  const [ugcLoading, setUgcLoading] = useState(false);
+
+  // 数据处理函数（复用主组件的逻辑）
+  const processTableData = (rawData: RawDataItem[], splitType: string): ProcessedTableData => {
+    const filtered = rawData.filter(item =>
+      item.fields?.['标题'] === '重点分子式声量及互动量表现（红书） ' &&
+      item.fields?.['拆分方式'] === splitType && // 根据传入的拆分方式筛选
+      item.fields?.['分子式']
+    );
+
+    const grouped: Record<string, Record<string, MoleculeData>> = {};
+    const dates = new Set<string>();
+    // 定义标准分子式名称（用于匹配）
+    const standardMolecules = [
+      '氮䓬斯汀氟替卡松',
+      '糠酸莫米松',
+      '布地奈德',
+      '丙酸氟替卡松'
+    ];
+    // 创建名称映射（处理可能的名称变体）
+    const moleculeNameMap: Record<string, string> = {
+      '氮䓬斯汀氟替卡松': '氮䓬斯汀氟替卡松',
+      '糠酸莫米松': '糠酸莫米松',
+      '糠酸莫米松鼻喷雾剂': '糠酸莫米松',
+      '布地奈德': '布地奈德',
+      '布地奈德鼻喷雾剂': '布地奈德',
+      '丙酸氟替卡松': '丙酸氟替卡松',
+      '丙酸氟替卡松鼻喷雾剂': '丙酸氟替卡松'
+    };
+
+    filtered.forEach(item => {
+      const date = item.fields['日期'];
+      let molecule = item.fields['分子式'];
+      const indicator = item.fields['分析指标'];
+      const value = item.fields['值'] || '-';
+
+      if (!date || !molecule) return;
+
+      // 标准化分子式名称并映射到标准名称
+      const normalizedName = normalizeMoleculeName(molecule);
+      // 查找匹配的标准名称
+      const matchedName = moleculeNameMap[normalizedName] ||
+                          Object.entries(moleculeNameMap).find(([key]) =>
+                            normalizedName.includes(key) || key.includes(normalizedName)
+                          )?.[1] ||
+                          normalizedName;
+
+      // 只处理标准列表中的分子式
+      if (!standardMolecules.includes(matchedName)) return;
+
+      if (!grouped[date]) {
+        grouped[date] = {};
+        standardMolecules.forEach(mol => {
+          grouped[date][mol] = { totalVoice: '-', sov: '-', totalInteract: '-', soe: '-' };
+        });
+      }
+
+      dates.add(date);
+
+      // 确保值是有效的（处理百分比、空值等）
+      let processedValue = value;
+      if (processedValue === '' || processedValue === '无') {
+        processedValue = '-';
+      }
+
+      switch (indicator) {
+        case '总声量':
+          grouped[date][matchedName].totalVoice = processedValue;
+          break;
+        case 'SOV':
+          grouped[date][matchedName].sov = processedValue;
+          break;
+        case '总互动量':
+          grouped[date][matchedName].totalInteract = processedValue;
+          break;
+        case 'SOE':
+          grouped[date][matchedName].soe = processedValue;
+          break;
+      }
+    });
+
+    const sortedDates = Array.from(dates).sort((a, b) => {
+      return parseMonthString(a).getTime() - parseMonthString(b).getTime();
+    });
+
+    return { grouped, sortedDates, molecules: standardMolecules };
+  };
+
+  // 加载对比数据
+  useEffect(() => {
+    const fetchCompareData = async () => {
+      try {
+        // 加载KOL数据
+        setKolLoading(true);
+        const kolRes = await axios.get('http://localhost:3000/api/feishu/XHSKOL');
+        const kolProcessed = processTableData(kolRes.data as RawDataItem[], 'KOL');
+        setKolCompareData(kolProcessed);
+
+        // 加载UGC数据
+        setUgcLoading(true);
+        const ugcRes = await axios.get('http://localhost:3000/api/feishu/XHSUGC');
+        const ugcProcessed = processTableData(ugcRes.data as RawDataItem[], 'UGC');
+        setUgcCompareData(ugcProcessed);
+      } catch (err) {
+        console.error('KOL/UGC对比数据加载失败:', err);
+        setCopySuccess('数据加载失败，请刷新重试');
+        setTimeout(() => setCopySuccess(''), 2000);
+      } finally {
+        setKolLoading(false);
+        setUgcLoading(false);
+      }
+    };
+
+    fetchCompareData();
+  }, [refreshKey]);
+
+  // 渲染单个表格（复用样式）
+  const renderTable = (
+    tableData: ProcessedTableData,
+    loading: boolean,
+    title: string
+  ) => {
+    if (loading) {
+      return (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '120px',
+          color: '#64748b',
+          background: '#fff',
+          borderRadius: '8px',
+          marginBottom: '24px'
+        }}>
+          {title}数据加载中...
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ marginBottom: '32px' }}>
+        {/* 表格标题和复制按钮 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: '#475569' }}>{title} 数据表格</span>
+          <button
+            style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `kolugc-compare-${title}`)}
+            onClick={() => copyTableData(tableData, title)}
+            disabled={loading || tableData.sortedDates.length === 0}
+            onMouseEnter={() => setCopyBtnHovered(`kolugc-compare-${title}`)}
+            onMouseLeave={() => setCopyBtnHovered(null)}
+          >
+            复制{title}表格数据到 Excel
+          </button>
+        </div>
+
+        {/* 表格内容 - 和HCP/NON-HCP面板样式完全一致 */}
+        <div style={tableStyles.container}>
+          <table style={tableStyles.table}>
+            <thead>
+              <tr style={tableStyles.headerRow1}>
+                <th
+                  rowSpan={3}
+                  style={{ ...tableStyles.headerCell, width: '80px' }}
+                >
+                  月份
+                </th>
+                {tableData.molecules.map(mol => (
+                  <th
+                    key={mol}
+                    colSpan={4}
+                    style={{ ...mol === '氮䓬斯汀氟替卡松' ? tableStyles.diminsiHeaderCell :tableStyles.headerCell, }}
+                  >
+                    {mol}
+                  </th>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2}>
+                {tableData.molecules.map(mol => (
+                  <React.Fragment key={mol}>
+                    <th style={tableStyles.subHeaderCell}>总声量</th>
+                    <th style={tableStyles.subHeaderCell}>SOV</th>
+                    <th style={tableStyles.subHeaderCell}>总互动量</th>
+                    <th style={tableStyles.subHeaderCell}>SOE</th>
+                  </React.Fragment>
+                ))}
+              </tr>
+              <tr style={tableStyles.headerRow2} />
+            </thead>
+            <tbody>
+              {tableData.sortedDates.length > 0 ? (
+                tableData.sortedDates.map(date => (
+                  <tr key={date} style={tableStyles.bodyRow}>
+                    <td style={{ ...tableStyles.cell, fontWeight: 500 }}>{date}</td>
+                    {tableData.molecules.map(mol => {
+                      const data = tableData.grouped[date][mol];
+                      return (
+                        <React.Fragment key={mol}>
+                          <td style={tableStyles.cell}>{data.totalVoice}</td>
+                          <td
+                            style={{
+                              ...tableStyles.cell,
+                              color: data.sov.includes('%') ? '#16a34a' : '#1e293b'
+                            }}
+                          >
+                            {data.sov}
+                          </td>
+                          <td style={tableStyles.cell}>{data.totalInteract}</td>
+                          <td
+                            style={{
+                              ...tableStyles.cell,
+                              color: data.soe.includes('%') ? '#16a34a' : '#1e293b'
+                            }}
+                          >
+                            {data.soe}
+                          </td>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={tableData.molecules.length * 4 + 1} style={tableStyles.cell}>
+                    暂无相关数据
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // 批量复制两个表格数据
+  const copyAllCompareData = () => {
+    if (kolCompareData.sortedDates.length === 0 || ugcCompareData.sortedDates.length === 0) {
+      setCopySuccess('暂无数据可复制');
+      setTimeout(() => setCopySuccess(''), 1500);
+      return;
+    }
+
+    // 构建KOL数据
+    const kolHeader = ['KOL - 月份'];
+    kolCompareData.molecules.forEach(mol => {
+      kolHeader.push(`${mol}-总声量`, `${mol}-SOV`, `${mol}-总互动量`, `${mol}-SOE`);
+    });
+    const kolLines = [kolHeader.join('\t')];
+    kolCompareData.sortedDates.forEach(date => {
+      const row = [date];
+      kolCompareData.molecules.forEach(mol => {
+        const data = kolCompareData.grouped[date][mol];
+        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+      });
+      kolLines.push(row.join('\t'));
+    });
+
+    // 构建UGC数据
+    const ugcHeader = ['\nUGC - 月份'];
+    ugcCompareData.molecules.forEach(mol => {
+      ugcHeader.push(`${mol}-总声量`, `${mol}-SOV`, `${mol}-总互动量`, `${mol}-SOE`);
+    });
+    const ugcLines = [ugcHeader.join('\t')];
+    ugcCompareData.sortedDates.forEach(date => {
+      const row = [date];
+      ugcCompareData.molecules.forEach(mol => {
+        const data = ugcCompareData.grouped[date][mol];
+        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+      });
+      ugcLines.push(row.join('\t'));
+    });
+
+    // 合并并复制
+    const allData = [...kolLines, ...ugcLines].join('\n');
+    navigator.clipboard.writeText(allData).then(() => {
+      setCopySuccess('KOL/UGC对比数据已复制，可粘贴到Excel');
+      setTimeout(() => setCopySuccess(''), 2000);
+    }).catch(() => {
+      setCopySuccess('复制失败，请手动复制');
+      setTimeout(() => setCopySuccess(''), 2000);
+    });
+  };
+
+  return (
+    <div style={{ padding: '8px 0' }}>
+      {/* 对比面板标题和批量复制按钮 */}
+      <div style={{
+        marginBottom: '24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: '16px',
+        borderBottom: '1px solid #e5e7eb'
+      }}>
+        <h2 style={{
+          fontSize: '18px',
+          color: '#1e293b',
+          fontWeight: 600,
+          margin: 0
+        }}>
+          KOL/UGC 数据对比
+        </h2>
+        <button
+          style={getCopyBtnStyle(
+            kolLoading || ugcLoading ||
+            kolCompareData.sortedDates.length === 0 ||
+            ugcCompareData.sortedDates.length === 0,
+            'kolugc-compare-all'
+          )}
+          onClick={copyAllCompareData}
+          disabled={
+            kolLoading || ugcLoading ||
+            kolCompareData.sortedDates.length === 0 ||
+            ugcCompareData.sortedDates.length === 0
+          }
+          onMouseEnter={() => setCopyBtnHovered('kolugc-compare-all')}
+          onMouseLeave={() => setCopyBtnHovered(null)}
+        >
+          复制全部对比数据到 Excel
+        </button>
+      </div>
+
+      {/* KOL表格（上） */}
+      {renderTable(kolCompareData, kolLoading, 'KOL')}
+
+      {/* UGC表格（下） */}
+      {renderTable(ugcCompareData, ugcLoading, 'UGC')}
+    </div>
+  );
+};
+
+
+
+
 
 export default function MoleculeTablePage() {
   const { selectedMonth } = useMonthContext();
@@ -497,14 +1209,8 @@ export default function MoleculeTablePage() {
     sortedDates: [],
     molecules: []
   });
-  // UGC数据
+  // UGC数据（新增）
   const [ugcTableData, setUgcTableData] = useState<ProcessedTableData>({
-    grouped: {},
-    sortedDates: [],
-    molecules: []
-  });
-  // KOC数据 - 保留不动
-  const [kocTableData, setKocTableData] = useState<ProcessedTableData>({
     grouped: {},
     sortedDates: [],
     molecules: []
@@ -524,12 +1230,11 @@ export default function MoleculeTablePage() {
   const [nonHcpLoading, setNonHcpLoading] = useState(false);
   const [kolLoading, setKolLoading] = useState(false);
   const [ugcLoading, setUgcLoading] = useState(false);
-  const [kocLoading, setKocLoading] = useState(false); // 保留KOC加载状态
   const [platformLoading, setPlatformLoading] = useState(false); // 新增平台加载状态
 
   // 一级标签切换状态
   const [activeMainTab, setActiveMainTab] = useState<MainTabType>('kpiOverview');
-  // 二级标签切换状态
+  // 🌟 修改：初始化二级标签为hcp（保持原有逻辑）
   const [activeSubTab, setActiveSubTab] = useState<SubTabType>('hcp');
 
   // 复制成功提示
@@ -566,17 +1271,11 @@ export default function MoleculeTablePage() {
   const kolSovAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   const kolSoeAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
 
-  // UGC图表引用
+  // UGC图表引用（新增）
   const ugcVoiceChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   const ugcInteractChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   const ugcSovAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   const ugcSoeAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
-
-  // KOC图表引用 - 保留不动
-  const kocVoiceChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
-  const kocInteractChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
-  const kocSovAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
-  const kocSoeAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
 
   // 新增：平台分布图表引用
   const platformVoiceChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
@@ -587,9 +1286,9 @@ export default function MoleculeTablePage() {
   // 切换一级标签时重置二级标签为默认值
   useEffect(() => {
     if (activeMainTab === 'hcpNonHcp') {
-      setActiveSubTab('hcp');
+      setActiveSubTab('hcpNonHcpCompare');
     } else if (activeMainTab === 'kolUgc') {
-      setActiveSubTab('kol'); // 默认选中KOL
+      setActiveSubTab('kolUgcCompare');
     }
   }, [activeMainTab]);
 
@@ -917,9 +1616,7 @@ export default function MoleculeTablePage() {
         try {
           setKpiLoading(true);
           const res = await axios.get('http://localhost:3000/api/feishu/XHS');
-          console.log('KPI原始数据:', res.data);
           const processedTableData = processTableData(res.data as RawDataItem[], '全量数据');
-           console.log('处理后KPI数据:', processedTableData);
           setKpiTableData(processedTableData);
         } catch (err) {
           console.error('KPI数据加载失败:', err);
@@ -992,7 +1689,7 @@ export default function MoleculeTablePage() {
     }
   }, [activeMainTab, activeSubTab, refreshKey]);
 
-  // 获取UGC数据（拆分方式：UGC）
+  // 获取UGC数据（拆分方式：UGC）- 新增
   useEffect(() => {
     if (activeMainTab === 'kolUgc' && activeSubTab === 'ugc') {
       const fetchUgcData = async () => {
@@ -1009,27 +1706,6 @@ export default function MoleculeTablePage() {
       };
 
       fetchUgcData();
-    }
-  }, [activeMainTab, activeSubTab, refreshKey]);
-
-  // 获取KOC数据（拆分方式：KOC）- 保留不动
-  useEffect(() => {
-    if (activeMainTab === 'kolUgc' && activeSubTab === 'koc') {
-      const fetchKocData = async () => {
-        try {
-          setKocLoading(true);
-          // 请根据实际KOC数据接口修改地址
-          const res = await axios.get('http://localhost:3000/api/feishu/XHSKOC');
-          const processedTableData = processTableData(res.data as RawDataItem[], 'KOC');
-          setKocTableData(processedTableData);
-        } catch (err) {
-          console.error('KOC数据加载失败:', err);
-        } finally {
-          setKocLoading(false);
-        }
-      };
-
-      fetchKocData();
     }
   }, [activeMainTab, activeSubTab, refreshKey]);
 
@@ -1085,17 +1761,11 @@ export default function MoleculeTablePage() {
       kolSovAreaChartRef.current?.getEchartsInstance().resize();
       kolSoeAreaChartRef.current?.getEchartsInstance().resize();
 
-      // UGC图表重绘
+      // UGC图表重绘 - 新增
       ugcVoiceChartRef.current?.getEchartsInstance().resize();
       ugcInteractChartRef.current?.getEchartsInstance().resize();
       ugcSovAreaChartRef.current?.getEchartsInstance().resize();
       ugcSoeAreaChartRef.current?.getEchartsInstance().resize();
-
-      // KOC图表重绘 - 保留不动
-      kocVoiceChartRef.current?.getEchartsInstance().resize();
-      kocInteractChartRef.current?.getEchartsInstance().resize();
-      kocSovAreaChartRef.current?.getEchartsInstance().resize();
-      kocSoeAreaChartRef.current?.getEchartsInstance().resize();
 
       // 新增：平台分布图表重绘
       platformVoiceChartRef.current?.getEchartsInstance().resize();
@@ -1108,10 +1778,10 @@ export default function MoleculeTablePage() {
     return () => window.removeEventListener('resize', resizeHandler);
   }, []);
 
-  // 表格样式配置 - 对齐抖音版本
+  // 表格样式配置
   const tableStyles = {
     container: {
-      marginTop: '24px',
+      marginTop: '20px',
       overflowX: 'auto' as const,
       borderRadius: '8px',
       boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
@@ -1120,18 +1790,20 @@ export default function MoleculeTablePage() {
       width: '100%',
       borderCollapse: 'collapse' as const,
       fontFamily: 'Inter, sans-serif',
-      fontSize: '14px',
-      lineHeight: '1.2'
+      fontSize: '13px',
+      lineHeight: '1.2',
+
     },
     headerRow1: {
-      backgroundColor: '#facc15',
+      backgroundColor: '#f8fafc',
       color: '#1e293b',
       lineHeight: '1.2'
     },
     headerRow2: {
       backgroundColor: '#4b5563',
       color: '#ffffff',
-      lineHeight: '1.2'
+      lineHeight: '1.2',
+
     },
     bodyRow: {
       backgroundColor: '#ffffff',
@@ -1149,6 +1821,14 @@ export default function MoleculeTablePage() {
       textAlign: 'center' as const,
       fontWeight: 600
     },
+    diminsiHeaderCell: {
+    border: '1px solid #d1d5db',
+    padding: '6px 8px',
+    textAlign: 'center' as const,
+    fontWeight: 600,
+    backgroundColor: '#ffb900', // 琥珀色表头
+    color: '#44403c', // 深色文字
+  },
     subHeaderCell: {
       border: '1px solid #d1d5db',
       padding: '4px 6px',
@@ -1157,14 +1837,14 @@ export default function MoleculeTablePage() {
     }
   };
 
-  // 复制按钮样式 - 对齐抖音版本
+  // 复制按钮样式 - 修复hover问题：使用状态控制样式
   const getCopyBtnStyle = (disabled: boolean, btnKey: string) => {
     const baseStyle: React.CSSProperties = {
       padding: '6px 14px',
       fontSize: 13,
       borderWidth: '1px',
-      borderStyle: 'solid',
-      borderColor: '#e2e8f0',
+    borderStyle: 'solid',
+    borderColor: '#e2e8f0',
       borderRadius: 8,
       background: '#fff',
       cursor: 'pointer',
@@ -1250,7 +1930,7 @@ export default function MoleculeTablePage() {
                   <th
                     key={mol}
                     colSpan={4}
-                    style={tableStyles.headerCell}
+                    style={{ ...mol === '氮䓬斯汀氟替卡松' ? tableStyles.diminsiHeaderCell :tableStyles.headerCell, }}
                   >
                     {mol}
                   </th>
@@ -1324,555 +2004,645 @@ export default function MoleculeTablePage() {
             gap: '24px',
             width: '100%'
           }}>
-            {/* 总声量趋势图 */}
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>总声量趋势</div>
-                <button
-                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `voice-${panelTitle}`)}
-                  onClick={() => copyChartData(tableData, 'totalVoice', '总声量', panelTitle)}
-                  disabled={loading || tableData.sortedDates.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered(`voice-${panelTitle}`)}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={chartRefs.voice}
-                option={getLineChartOption(
-                  tableData.sortedDates,
-                  tableData.grouped,
-                  tableData.molecules,
-                  'totalVoice',
-                  '总声量'
-                )}
-                style={{ height: '380px' }}
-              />
-            </div>
+                         {/* 总声量趋势图 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>{panelTitle} - 总声量趋势</div>
+                 <button
+                   style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `voice-${panelTitle}`)}
+                   onClick={() => copyChartData(tableData, 'totalVoice', '总声量', panelTitle)}
+                   disabled={loading || tableData.sortedDates.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered(`voice-${panelTitle}`)}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={chartRefs.voice}
+                 option={getLineChartOption(
+                   tableData.sortedDates,
+                   tableData.grouped,
+                   tableData.molecules,
+                   'totalVoice',
+                   '总声量'
+                 )}
+                 style={{ height: '380px' }}
+               />
+             </div>
 
-            {/* 总互动量趋势图 */}
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>总互动量趋势</div>
-                <button
-                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `interact-${panelTitle}`)}
-                  onClick={() => copyChartData(tableData, 'totalInteract', '总互动量', panelTitle)}
-                  disabled={loading || tableData.sortedDates.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered(`interact-${panelTitle}`)}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={chartRefs.interact}
-                option={getLineChartOption(
-                  tableData.sortedDates,
-                  tableData.grouped,
-                  tableData.molecules,
-                  'totalInteract',
-                  '总互动量'
-                )}
-                style={{ height: '380px' }}
-              />
-            </div>
-          </div>
+             {/* 总互动量趋势图 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>总互动量趋势</div>
+                 <button
+                                      style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `interact-${panelTitle}`)}
+                   onClick={() => copyChartData(tableData, 'totalInteract', '总互动量', panelTitle)}
+                   disabled={loading || tableData.sortedDates.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered(`interact-${panelTitle}`)}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={chartRefs.interact}
+                 option={getLineChartOption(
+                   tableData.sortedDates,
+                   tableData.grouped,
+                   tableData.molecules,
+                   'totalInteract',
+                   '总互动量'
+                 )}
+                 style={{ height: '380px' }}
+               />
+             </div>
+           </div>
 
-          {/* 面积图行 */}
-          <div style={{
-            display: 'flex',
-            gap: '24px',
-            width: '100%'
-          }}>
-            {/* SOV 堆叠面积图 */}
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>SOV 占比趋势</div>
-                <button
-                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `sov-${panelTitle}`)}
-                  onClick={() => copyChartData(tableData, 'sov', 'SOV', panelTitle)}
-                  disabled={loading || tableData.sortedDates.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered(`sov-${panelTitle}`)}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={chartRefs.sovArea}
-                option={getAreaChartOption(
-                  tableData.sortedDates,
-                  tableData.grouped,
-                  tableData.molecules,
-                  'sov',
-                  'SOV 占比'
-                )}
-                style={{ height: '380px' }}
-              />
-            </div>
+           {/* 面积图行 */}
+           <div style={{
+             display: 'flex',
+             gap: '24px',
+             width: '100%'
+           }}>
+             {/* SOV堆叠面积图 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>SOV占比趋势</div>
+                 <button
+                   style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `sov-${panelTitle}`)}
+                   onClick={() => copyChartData(tableData, 'sov', 'SOV', panelTitle)}
+                   disabled={loading || tableData.sortedDates.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered(`sov-${panelTitle}`)}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={chartRefs.sovArea}
+                 option={getAreaChartOption(
+                   tableData.sortedDates,
+                   tableData.grouped,
+                   tableData.molecules,
+                   'sov',
+                   'SOV（%）'
+                 )}
+                 style={{ height: '380px' }}
+               />
+             </div>
 
-            {/* SOE 堆叠面积图 */}
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>SOE 占比趋势</div>
-                <button
-                  style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `soe-${panelTitle}`)}
-                  onClick={() => copyChartData(tableData, 'soe', 'SOE', panelTitle)}
-                  disabled={loading || tableData.sortedDates.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered(`soe-${panelTitle}`)}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={chartRefs.soeArea}
-                option={getAreaChartOption(
-                  tableData.sortedDates,
-                  tableData.grouped,
-                  tableData.molecules,
-                  'soe',
-                  'SOE 占比'
-                )}
-                style={{ height: '380px' }}
-              />
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  };
+             {/* SOE堆叠面积图 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>SOE占比趋势</div>
+                 <button
+                   style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `soe-${panelTitle}`)}
+                   onClick={() => copyChartData(tableData, 'soe', 'SOE', panelTitle)}
+                   disabled={loading || tableData.sortedDates.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered(`soe-${panelTitle}`)}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={chartRefs.soeArea}
+                 option={getAreaChartOption(
+                   tableData.sortedDates,
+                   tableData.grouped,
+                   tableData.molecules,
+                   'soe',
+                   'SOE（%）'
+                 )}
+                 style={{ height: '380px' }}
+               />
+             </div>
+           </div>
+         </div>
+       </>
+     );
+   };
 
-  // 新增：平台分布面板渲染
-  const renderPlatformPanel = () => {
-    if (platformLoading) {
-      return (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '120px',
-          color: '#64748b'
-        }}>
-          平台分布数据加载中...
-        </div>
-      );
-    }
+   // 平台分布面板渲染函数
+   const renderPlatformPanel = (
+     platformData: ProcessedPlatformData,
+     loading: boolean
+   ) => {
+     if (loading) {
+       return (
+         <div style={{
+           display: 'flex',
+           justifyContent: 'center',
+           alignItems: 'center',
+           height: '120px',
+           color: '#64748b'
+         }}>
+           平台分布数据加载中...
+         </div>
+       );
+     }
 
-    return (
-      <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ fontSize: '15px', fontWeight: 500, color: '#475569' }}>
-            平台分布数据表格 - {selectedMonth}
-          </span>
-          <button
-            style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0, 'platform-table')}
-            onClick={() => copyPlatformData(platformTableData)}
-            disabled={platformLoading || platformTableData.platforms.length === 0}
-            onMouseEnter={() => setCopyBtnHovered('platform-table')}
-            onMouseLeave={() => setCopyBtnHovered(null)}
-          >
-            复制完整平台数据到 Excel
-          </button>
-        </div>
+     return (
+       <>
+         {/* 表格区域 + 复制按钮 */}
+         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+           <span style={{ fontSize: '15px', fontWeight: 500, color: '#475569' }}>
+             声量及互动量平台分布数据表格（{platformData.selectedMonth}）
+           </span>
+           <button
+             style={getCopyBtnStyle(loading || platformData.platforms.length === 0, 'table-platform')}
+             onClick={() => copyPlatformData(platformData)}
+             disabled={loading || platformData.platforms.length === 0}
+             onMouseEnter={() => setCopyBtnHovered('table-platform')}
+             onMouseLeave={() => setCopyBtnHovered(null)}
+           >
+             复制完整表格数据到 Excel
+           </button>
+         </div>
 
-        <div style={tableStyles.container}>
-          <table style={tableStyles.table}>
-            <thead>
-              <tr style={tableStyles.headerRow1}>
-                <th rowSpan={3} style={{ ...tableStyles.headerCell, width: '100px' }}>平台</th>
-                {platformTableData.molecules.map(mol => (
-                  <th key={mol} colSpan={4} style={tableStyles.headerCell}>{mol}</th>
-                ))}
-              </tr>
-              <tr style={tableStyles.headerRow2}>
-                {platformTableData.molecules.map(mol => (
-                  <React.Fragment key={mol}>
-                    <th style={tableStyles.subHeaderCell}>总声量</th>
-                    <th style={tableStyles.subHeaderCell}>SOV</th>
-                    <th style={tableStyles.subHeaderCell}>总互动量</th>
-                    <th style={tableStyles.subHeaderCell}>SOE</th>
-                  </React.Fragment>
-                ))}
-              </tr>
-              <tr style={tableStyles.headerRow2} />
-            </thead>
-            <tbody>
-              {platformTableData.platforms.length > 0 ? (
-                platformTableData.platforms.map(platform => (
-                  <tr key={platform} style={tableStyles.bodyRow}>
-                    <td style={{ ...tableStyles.cell, fontWeight: 500 }}>{platform}</td>
-                    {platformTableData.molecules.map(mol => {
-                      const data = platformTableData.grouped[platform]?.[mol] || {
-                        totalVoice: '-',
-                        sov: '-',
-                        totalInteract: '-',
-                        soe: '-'
-                      };
-                      return (
-                        <React.Fragment key={mol}>
-                          <td style={tableStyles.cell}>{data.totalVoice}</td>
-                          <td style={{ ...tableStyles.cell, color: data.sov.includes('%') ? '#16a34a' : '#1e293b' }}>
-                            {data.sov}
-                          </td>
-                          <td style={tableStyles.cell}>{data.totalInteract}</td>
-                          <td style={{ ...tableStyles.cell, color: data.soe.includes('%') ? '#16a34a' : '#1e293b' }}>
-                            {data.soe}
-                          </td>
-                        </React.Fragment>
-                      );
-                    })}
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={platformTableData.molecules.length * 4 + 1} style={tableStyles.cell}>
-                    暂无平台数据
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+         {/* 平台分布表格 */}
+         <div style={tableStyles.container}>
+           <table style={tableStyles.table}>
+             <thead>
+               <tr style={tableStyles.headerRow1}>
+                 <th
+                   rowSpan={3}
+                   style={{ ...tableStyles.headerCell, width: '120px' }}
+                 >
+                   平台
+                 </th>
+                 {platformData.molecules.map(mol => (
+                   <th
+                     key={mol}
+                     colSpan={4}
+                     style={{ ...mol === '氮䓬斯汀氟替卡松' ? tableStyles.diminsiHeaderCell :tableStyles.headerCell, }}
+                   >
+                     {mol}
+                   </th>
+                 ))}
+               </tr>
+               <tr style={tableStyles.headerRow2}>
+                 {platformData.molecules.map(mol => (
+                   <React.Fragment key={mol}>
+                     <th style={tableStyles.subHeaderCell}>总声量</th>
+                     <th style={tableStyles.subHeaderCell}>SOV</th>
+                     <th style={tableStyles.subHeaderCell}>总互动量</th>
+                     <th style={tableStyles.subHeaderCell}>SOE</th>
+                   </React.Fragment>
+                 ))}
+               </tr>
+               <tr style={tableStyles.headerRow2} />
+             </thead>
+             <tbody>
+               {platformData.platforms.length > 0 ? (
+                 platformData.platforms.map(platform => (
+                   <tr key={platform} style={tableStyles.bodyRow}>
+                     <td style={{ ...tableStyles.cell, fontWeight: 500 }}>{platform}</td>
+                     {platformData.molecules.map(mol => {
+                       const data = platformData.grouped[platform]?.[mol] || {
+                         totalVoice: '-', sov: '-', totalInteract: '-', soe: '-'
+                       };
+                       return (
+                         <React.Fragment key={mol}>
+                           <td style={tableStyles.cell}>{data.totalVoice}</td>
+                           <td
+                             style={{
+                               ...tableStyles.cell,
+                               color: data.sov.includes('%') ? '#16a34a' : '#1e293b'
+                             }}
+                           >
+                             {data.sov}
+                           </td>
+                           <td style={tableStyles.cell}>{data.totalInteract}</td>
+                           <td
+                             style={{
+                               ...tableStyles.cell,
+                               color: data.soe.includes('%') ? '#16a34a' : '#1e293b'
+                             }}
+                           >
+                             {data.soe}
+                           </td>
+                         </React.Fragment>
+                       );
+                     })}
+                   </tr>
+                 ))
+               ) : (
+                 <tr>
+                   <td colSpan={platformData.molecules.length * 4 + 1} style={tableStyles.cell}>
+                     暂无相关数据
+                   </td>
+                 </tr>
+               )}
+             </tbody>
+           </table>
+         </div>
 
-        <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', gap: '24px', width: '100%' }}>
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>各平台总声量分布</div>
-                <button
-                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0, 'platform-voice')}
-                  onClick={() => copyPlatformChartData(platformTableData, 'totalVoice', '总声量')}
-                  disabled={platformLoading || platformTableData.platforms.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered('platform-voice')}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={platformVoiceChartRef}
-                option={getPlatformChartOption(
-                  platformTableData.platforms,
-                  platformTableData.grouped,
-                  platformTableData.molecules,
-                  'totalVoice',
-                  '总声量',
-                  false
-                )}
-                style={{ height: '420px' }}
-              />
-            </div>
+         {/* 平台分布图表区域 */}
+         <div style={{
+           marginTop: '32px',
+           display: 'flex',
+           flexDirection: 'column',
+           gap: '16px'
+         }}>
+           {/* 第一组图表：总声量 + 总互动量 */}
+           <div style={{
+             display: 'flex',
+             gap: '24px',
+             width: '100%'
+           }}>
+             {/* 总声量平台分布 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>总声量平台分布</div>
+                 <button
+                   style={getCopyBtnStyle(loading || platformData.platforms.length === 0, 'voice-platform')}
+                   onClick={() => copyPlatformChartData(platformData, 'totalVoice', '总声量')}
+                   disabled={loading || platformData.platforms.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered('voice-platform')}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={platformVoiceChartRef}
+                 option={getPlatformChartOption(
+                   platformData.platforms,
+                   platformData.grouped,
+                   platformData.molecules,
+                   'totalVoice',
+                   '总声量',
+                   false
+                 )}
+                 style={{ height: '400px' }}
+               />
+             </div>
 
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>各平台总互动量分布</div>
-                <button
-                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0, 'platform-interact')}
-                  onClick={() => copyPlatformChartData(platformTableData, 'totalInteract', '总互动量')}
-                  disabled={platformLoading || platformTableData.platforms.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered('platform-interact')}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={platformInteractChartRef}
-                option={getPlatformChartOption(
-                  platformTableData.platforms,
-                  platformTableData.grouped,
-                  platformTableData.molecules,
-                  'totalInteract',
-                  '总互动量',
-                  false
-                )}
-                style={{ height: '420px' }}
-              />
-            </div>
-          </div>
-                    <div style={{ display: 'flex', gap: '24px', width: '100%' }}>
-            {/* SOV 平台分布 */}
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>各平台SOV占比分布</div>
-                <button
-                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0, 'platform-sov')}
-                  onClick={() => copyPlatformChartData(platformTableData, 'sov', 'SOV')}
-                  disabled={platformLoading || platformTableData.platforms.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered('platform-sov')}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={platformSovChartRef}
-                option={getPlatformChartOption(
-                  platformTableData.platforms,
-                  platformTableData.grouped,
-                  platformTableData.molecules,
-                  'sov',
-                  'SOV 占比',
-                  true
-                )}
-                style={{ height: '420px' }}
-              />
-            </div>
+             {/* 总互动量平台分布 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>总互动量平台分布</div>
+                 <button
+                   style={getCopyBtnStyle(loading || platformData.platforms.length === 0, 'interact-platform')}
+                   onClick={() => copyPlatformChartData(platformData, 'totalInteract', '总互动量')}
+                   disabled={loading || platformData.platforms.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered('interact-platform')}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={platformInteractChartRef}
+                 option={getPlatformChartOption(
+                   platformData.platforms,
+                   platformData.grouped,
+                   platformData.molecules,
+                   'totalInteract',
+                   '总互动量',
+                   false
+                 )}
+                 style={{ height: '400px' }}
+               />
+             </div>
+           </div>
 
-            {/* SOE 平台分布 */}
-            <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 500 }}>各平台SOE占比分布</div>
-                <button
-                  style={getCopyBtnStyle(platformLoading || platformTableData.platforms.length === 0, 'platform-soe')}
-                  onClick={() => copyPlatformChartData(platformTableData, 'soe', 'SOE')}
-                  disabled={platformLoading || platformTableData.platforms.length === 0}
-                  onMouseEnter={() => setCopyBtnHovered('platform-soe')}
-                  onMouseLeave={() => setCopyBtnHovered(null)}
-                >
-                  复制数据
-                </button>
-              </div>
-              <ReactECharts
-                ref={platformSoeChartRef}
-                option={getPlatformChartOption(
-                  platformTableData.platforms,
-                  platformTableData.grouped,
-                  platformTableData.molecules,
-                  'soe',
-                  'SOE 占比',
-                  true
-                )}
-                style={{ height: '420px' }}
-              />
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  };
+           {/* 第二组图表：SOV + SOE */}
+           <div style={{
+             display: 'flex',
+             gap: '24px',
+             width: '100%'
+           }}>
+             {/* SOV平台分布 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>SOV平台分布</div>
+                 <button
+                   style={getCopyBtnStyle(loading || platformData.platforms.length === 0, 'sov-platform')}
+                   onClick={() => copyPlatformChartData(platformData, 'sov', 'SOV')}
+                   disabled={loading || platformData.platforms.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered('sov-platform')}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={platformSovChartRef}
+                 option={getPlatformChartOption(
+                   platformData.platforms,
+                   platformData.grouped,
+                   platformData.molecules,
+                   'sov',
+                   'SOV（%）',
+                   true
+                 )}
+                 style={{ height: '400px' }}
+               />
+             </div>
 
-  // 标签按钮样式
-  const getTabBtnStyle = (isActive: boolean, btnKey: string, isSubTab = false) => {
-    const baseStyle: React.CSSProperties = {
-      padding: isSubTab ? '6px 16px' : '8px 20px',
-      fontSize: isSubTab ? 14 : 15,
-      border: 'none',
-      borderRadius: 6,
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      marginRight: isSubTab ? 8 : 12,
-      fontWeight: 500
-    };
+             {/* SOE平台分布 */}
+             <div style={{ flex: 1, minWidth: '48%', background: '#fff', borderRadius: 8, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                 <div style={{ fontSize: 15, fontWeight: 500 }}>SOE平台分布</div>
+                 <button
+                   style={getCopyBtnStyle(loading || platformData.platforms.length === 0, 'soe-platform')}
+                   onClick={() => copyPlatformChartData(platformData, 'soe', 'SOE')}
+                   disabled={loading || platformData.platforms.length === 0}
+                   onMouseEnter={() => setCopyBtnHovered('soe-platform')}
+                   onMouseLeave={() => setCopyBtnHovered(null)}
+                 >
+                   复制数据
+                 </button>
+               </div>
+               <ReactECharts
+                 ref={platformSoeChartRef}
+                 option={getPlatformChartOption(
+                   platformData.platforms,
+                   platformData.grouped,
+                   platformData.molecules,
+                   'soe',
+                   'SOE（%）',
+                   true
+                 )}
+                 style={{ height: '400px' }}
+               />
+             </div>
+           </div>
+         </div>
+       </>
+     );
+   };
 
-    if (isActive) {
-      return {
-        ...baseStyle,
-        background: '#1890ff',
-        color: '#fff',
-        boxShadow: '0 2px 4px rgba(24, 144, 255, 0.2)'
-      };
-    }
+   // 标签按钮样式
+   const getTabBtnStyle = (isActive: boolean, btnKey: string, isSubTab = false) => {
+     const baseStyle: React.CSSProperties = {
+       padding: isSubTab ? '6px 16px' : '8px 20px',
+       fontSize: isSubTab ? 14 : 15,
+       border: 'none',
+       borderRadius: 6,
+       cursor: 'pointer',
+       transition: 'all 0.2s',
+       fontWeight: 500,
+       marginRight: isSubTab ? 8 : 12
+     };
 
-    const hoverKey = isSubTab ? `sub-${btnKey}` : `main-${btnKey}`;
-    if ((isSubTab && subTabBtnHovered === btnKey) || (!isSubTab && tabBtnHovered === btnKey)) {
-      return {
-        ...baseStyle,
-        background: '#f0f7ff',
-        color: '#1890ff'
-      };
-    }
+     if (isActive) {
+       return {
+         ...baseStyle,
+         background: '#1890ff',
+         color: '#fff',
+         boxShadow: '0 2px 4px rgba(24, 144, 255, 0.2)'
+       };
+     }
 
-    return {
-      ...baseStyle,
-      background: '#f8fafc',
-      color: '#475569'
-    };
-  };
+     const hoverKey = isSubTab ? `sub-${btnKey}` : `main-${btnKey}`;
+     if ((!isSubTab && tabBtnHovered === hoverKey) || (isSubTab && subTabBtnHovered === hoverKey)) {
+       return {
+         ...baseStyle,
+         background: '#f0f7ff',
+         color: '#1890ff'
+       };
+     }
 
-  return (
-    <div style={{
-      padding: '24px',
-      backgroundColor: '#f9fafb',
-      minHeight: '100vh',
-      fontFamily: 'Inter, sans-serif'
-    }}>
-      {/* 页面标题和刷新按钮 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{
-          fontSize: '20px',
-          fontWeight: 600,
-          color: '#1e293b',
-          margin: 0
-        }}>
-          重点分子式声量及互动量分析（红书）
-        </h1>
-        <button
-          style={{
-            padding: '8px 16px',
-            fontSize: 14,
-            border: '1px solid #e2e8f0',
-            borderRadius: 6,
-            background: '#fff',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            transition: 'all 0.2s'
-          }}
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          <span>{refreshing ? '刷新中...' : '刷新数据'}</span>
-          <span>{refreshing ? '' : ''}</span>
-        </button>
-      </div>
+     return {
+       ...baseStyle,
+       background: '#f9fafb',
+       color: '#475569'
+     };
+   };
 
-      {/* 复制成功提示 */}
-      {copySuccess && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          padding: '10px 20px',
-          backgroundColor: '#10b981',
-          color: '#fff',
-          borderRadius: 6,
-          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)',
-          zIndex: 1000,
-          animation: 'fadeInOut 1.5s ease'
-        }}>
-          {copySuccess}
-        </div>
-      )}
+   return (
+     <div style={{
+       padding: '24px',
+       background: '#f8fafc',
+       minHeight: '100vh',
+       fontFamily: 'Inter, sans-serif'
+     }}>
+       {/* 顶部标题和刷新按钮 */}
+       <div style={{
+         display: 'flex',
+         justifyContent: 'space-between',
+         alignItems: 'center',
+         marginBottom: '24px'
+       }}>
+         <h1 style={{
+           fontSize: '22px',
+           color: '#1e293b',
+           fontWeight: 600,
+           margin: 0
+         }}>
+           重点分子式声量及互动量分析
+         </h1>
+         <div style={{ display: 'flex', alignItems: 'center' }}>
+           <button
+             style={{
+               padding: '8px 16px',
+               fontSize: 14,
+               border: '1px solid #e2e8f0',
+               borderRadius: 8,
+               background: refreshing ? '#f0f7ff' : '#fff',
+               color: '#1890ff',
+               cursor: refreshing ? 'not-allowed' : 'pointer',
+               display: 'flex',
+               alignItems: 'center',
+               gap: 8,
+               transition: 'all 0.2s'
+             }}
+             onClick={handleRefresh}
+             disabled={refreshing}
+           >
+             <span>{refreshing ? '刷新中...' : '刷新数据'}</span>
+             <svg
+               xmlns="http://www.w3.org/2000/svg"
+               width="16"
+               height="16"
+               viewBox="0 0 24 24"
+               fill="none"
+               stroke="currentColor"
+               strokeWidth="2"
+               strokeLinecap="round"
+               strokeLinejoin="round"
+               style={{
+                 transform: refreshing ? 'rotate(180deg)' : 'rotate(0)',
+                 transition: 'transform 0.5s ease'
+               }}
+             >
+               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+               <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+             </svg>
+           </button>
+         </div>
+       </div>
 
-      {/* 一级标签栏 */}
-      <div style={{ marginBottom: '24px' }}>
-        {mainTabConfig.map((tab) => (
-          <button
-            key={tab.key}
-            style={getTabBtnStyle(activeMainTab === tab.key, tab.key)}
-            onClick={() => setActiveMainTab(tab.key as MainTabType)}
-            onMouseEnter={() => setTabBtnHovered(tab.key)}
-            onMouseLeave={() => setTabBtnHovered(null)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+       {/* 复制成功提示 */}
+       {copySuccess && (
+         <div style={{
+           position: 'fixed',
+           top: '20px',
+           right: '20px',
+           background: '#10b981',
+           color: '#fff',
+           padding: '10px 16px',
+           borderRadius: '8px',
+           boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)',
+           zIndex: 1000,
+           fontSize: '14px'
+         }}>
+           {copySuccess}
+         </div>
+       )}
 
-      {/* 二级标签栏（根据一级标签显示） */}
-      {(activeMainTab === 'hcpNonHcp' || activeMainTab === 'kolUgc') && (
-        <div style={{ marginBottom: '24px', paddingLeft: 4 }}>
-          {subTabConfigs[activeMainTab].map((tab) => (
-            <button
-              key={tab.key}
-              style={getTabBtnStyle(activeSubTab === tab.key, tab.key, true)}
-              onClick={() => setActiveSubTab(tab.key as SubTabType)}
-              onMouseEnter={() => setSubTabBtnHovered(tab.key)}
-              onMouseLeave={() => setSubTabBtnHovered(null)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
+       {/* 一级标签栏 */}
+       <div style={{
+         display: 'flex',
+         marginBottom: '24px',
+         alignItems: 'center'
+       }}>
+         {mainTabConfig.map((tab) => (
+           <button
+             key={tab.key}
+             style={getTabBtnStyle(activeMainTab === tab.key, tab.key)}
+             onClick={() => setActiveMainTab(tab.key as MainTabType)}
+             onMouseEnter={() => setTabBtnHovered(`main-${tab.key}`)}
+             onMouseLeave={() => setTabBtnHovered(null)}
+           >
+             {tab.label}
+           </button>
+         ))}
+       </div>
 
-      {/* 内容区域 */}
-      <div style={{ width: '100%' }}>
-        {activeMainTab === 'kpiOverview' && renderCommonPanel(
-          kpiTableData,
-          kpiLoading,
-          {
-            voice: kpiVoiceChartRef,
-            interact: kpiInteractChartRef,
-            sovArea: kpiSovAreaChartRef,
-            soeArea: kpiSoeAreaChartRef
-          },
-          'KPI总览'
-        )}
+       {/* 二级标签栏（仅在HCP/NON-HCP和KOL/UGC标签下显示） */}
+       {(activeMainTab === 'hcpNonHcp' || activeMainTab === 'kolUgc') && (
+         <div style={{
+           display: 'flex',
+           marginBottom: '24px',
+           paddingLeft: '4px'
+         }}>
+           {subTabConfigs[activeMainTab].map((tab) => (
+             <button
+               key={tab.key}
+               style={getTabBtnStyle(activeSubTab === tab.key, tab.key, true)}
+               onClick={() => setActiveSubTab(tab.key as SubTabType)}
+               onMouseEnter={() => setSubTabBtnHovered(`sub-${tab.key}`)}
+               onMouseLeave={() => setSubTabBtnHovered(null)}
+             >
+               {tab.label}
+             </button>
+           ))}
+         </div>
+       )}
 
-        {activeMainTab === 'hcpNonHcp' && activeSubTab === 'hcp' && renderCommonPanel(
-          hcpTableData,
-          hcpLoading,
-          {
-            voice: hcpVoiceChartRef,
-            interact: hcpInteractChartRef,
-            sovArea: hcpSovAreaChartRef,
-            soeArea: hcpSoeAreaChartRef
-          },
-          'HCP'
-        )}
+       {/* 主内容区域 */}
+       <div style={{
+         background: '#fff',
+         borderRadius: '12px',
+         padding: '24px',
+         boxShadow: '0 2px 10px rgba(0,0,0,0.04)'
+       }}>
+         {/* KPI总览面板 */}
+         {activeMainTab === 'kpiOverview' && renderCommonPanel(
+           kpiTableData,
+           kpiLoading,
+           {
+             voice: kpiVoiceChartRef,
+             interact: kpiInteractChartRef,
+             sovArea: kpiSovAreaChartRef,
+             soeArea: kpiSoeAreaChartRef
+           },
+           'KPI总览'
+         )}
 
-        {activeMainTab === 'hcpNonHcp' && activeSubTab === 'nonHcp' && renderCommonPanel(
-          nonHcpTableData,
-          nonHcpLoading,
-          {
-            voice: nonHcpVoiceChartRef,
-            interact: nonHcpInteractChartRef,
-            sovArea: nonHcpSovAreaChartRef,
-            soeArea: nonHcpSoeAreaChartRef
-          },
-          'NON-HCP'
-        )}
+         {/* HCP面板 */}
+         {activeMainTab === 'hcpNonHcp' && activeSubTab === 'hcp' && renderCommonPanel(
+           hcpTableData,
+           hcpLoading,
+           {
+             voice: hcpVoiceChartRef,
+             interact: hcpInteractChartRef,
+             sovArea: hcpSovAreaChartRef,
+             soeArea: hcpSoeAreaChartRef
+           },
+           'HCP'
+         )}
 
-        {activeMainTab === 'kolUgc' && activeSubTab === 'kol' && renderCommonPanel(
-          kolTableData,
-          kolLoading,
-          {
-            voice: kolVoiceChartRef,
-            interact: kolInteractChartRef,
-            sovArea: kolSovAreaChartRef,
-            soeArea: kolSoeAreaChartRef
-          },
-          'KOL'
-        )}
+         {/* NON-HCP面板 */}
+         {activeMainTab === 'hcpNonHcp' && activeSubTab === 'nonHcp' && renderCommonPanel(
+           nonHcpTableData,
+           nonHcpLoading,
+           {
+             voice: nonHcpVoiceChartRef,
+             interact: nonHcpInteractChartRef,
+             sovArea: nonHcpSovAreaChartRef,
+             soeArea: nonHcpSoeAreaChartRef
+           },
+           'NON-HCP'
+         )}
 
-        {activeMainTab === 'kolUgc' && activeSubTab === 'ugc' && renderCommonPanel(
-          ugcTableData,
-          ugcLoading,
-          {
-            voice: ugcVoiceChartRef,
-            interact: ugcInteractChartRef,
-            sovArea: ugcSovAreaChartRef,
-            soeArea: ugcSoeAreaChartRef
-          },
-          'UGC'
-        )}
+         {/* HCP/NON-HCP对比面板 */}
+         {activeMainTab === 'hcpNonHcp' && activeSubTab === 'hcpNonHcpCompare' && (
+           <HcpNonHcpComparePanel
+             copyBtnHovered={copyBtnHovered}
+             setCopyBtnHovered={setCopyBtnHovered}
+             setCopySuccess={setCopySuccess}
+             refreshKey={refreshKey}
+             getCopyBtnStyle={getCopyBtnStyle}
+             copyTableData={copyTableData}
+             tableStyles={tableStyles}
+           />
+         )}
 
-        {activeMainTab === 'kolUgc' && activeSubTab === 'koc' && renderCommonPanel(
-          kocTableData,
-          kocLoading,
-          {
-            voice: kocVoiceChartRef,
-            interact: kocInteractChartRef,
-            sovArea: kocSovAreaChartRef,
-            soeArea: kocSoeAreaChartRef
-          },
-          'KOC'
-        )}
+         {/* KOL面板 */}
+         {activeMainTab === 'kolUgc' && activeSubTab === 'kol' && renderCommonPanel(
+           kolTableData,
+           kolLoading,
+           {
+             voice: kolVoiceChartRef,
+             interact: kolInteractChartRef,
+             sovArea: kolSovAreaChartRef,
+             soeArea: kolSoeAreaChartRef
+           },
+           'KOL'
+         )}
 
-        {activeMainTab === 'voicePlatformDistribution' && renderPlatformPanel()}
-      </div>
+         {/* UGC面板 */}
+         {activeMainTab === 'kolUgc' && activeSubTab === 'ugc' && renderCommonPanel(
+           ugcTableData,
+           ugcLoading,
+           {
+             voice: ugcVoiceChartRef,
+             interact: ugcInteractChartRef,
+             sovArea: ugcSovAreaChartRef,
+             soeArea: ugcSoeAreaChartRef
+           },
+           'UGC'
+         )}
 
-      {/* 样式补充 */}
-      <style jsx global>{`
-        @keyframes fadeInOut {
-          0% { opacity: 0; transform: translateY(-10px); }
-          10% { opacity: 1; transform: translateY(0); }
-          90% { opacity: 1; transform: translateY(0); }
-          100% { opacity: 0; transform: translateY(-10px); }
-        }
-        * {
-          box-sizing: border-box;
-        }
-        body {
-          margin: 0;
-          padding: 0;
-        }
-      `}</style>
-    </div>
-  );
+
+
+                  {/* KOL/UGC对比面板 */}
+         {activeMainTab === 'kolUgc' && activeSubTab === 'kolUgcCompare' && (
+           <KolUgcComparePanel
+             copyBtnHovered={copyBtnHovered}
+             setCopyBtnHovered={setCopyBtnHovered}
+             setCopySuccess={setCopySuccess}
+             refreshKey={refreshKey}
+             getCopyBtnStyle={getCopyBtnStyle}
+             copyTableData={copyTableData}
+             tableStyles={tableStyles}
+           />
+         )}
+
+
+
+         {/* 平台分布面板 */}
+         {activeMainTab === 'voicePlatformDistribution' && renderPlatformPanel(
+           platformTableData,
+           platformLoading
+         )}
+       </div>
+     </div>
+   );
 }
