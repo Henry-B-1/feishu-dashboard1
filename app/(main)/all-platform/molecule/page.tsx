@@ -577,13 +577,13 @@ const HcpNonHcpComparePanel: React.FC<{
       try {
         // 加载HCP数据
         setHcpLoading(true);
-        const hcpRes = await axios.get('http://localhost:3000/api/feishu/recordsHCP');
+        const hcpRes = await axios.get('/api/feishu/recordsHCP');
         const hcpProcessed = processTableData(hcpRes.data as RawDataItem[], 'HCP');
         setHcpCompareData(hcpProcessed);
 
         // 加载NON-HCP数据
         setNonHcpLoading(true);
-        const nonHcpRes = await axios.get('http://localhost:3000/api/feishu/recordsNONHCP');
+        const nonHcpRes = await axios.get('/api/feishu/recordsNONHCP');
         const nonHcpProcessed = processTableData(nonHcpRes.data as RawDataItem[], 'NON-HCP');
         setNonHcpCompareData(nonHcpProcessed);
       } catch (err) {
@@ -942,13 +942,13 @@ const KolUgcComparePanel: React.FC<{
       try {
         // 加载KOL数据
         setKolLoading(true);
-        const kolRes = await axios.get('http://localhost:3000/api/feishu/recordsKOL');
+        const kolRes = await axios.get('/api/feishu/recordsKOL');
         const kolProcessed = processTableData(kolRes.data as RawDataItem[], 'KOL');
         setKolCompareData(kolProcessed);
 
         // 加载UGC数据
         setUgcLoading(true);
-        const ugcRes = await axios.get('http://localhost:3000/api/feishu/recordsUGC');
+        const ugcRes = await axios.get('/api/feishu/recordsUGC');
         const ugcProcessed = processTableData(ugcRes.data as RawDataItem[], 'UGC');
         setUgcCompareData(ugcProcessed);
       } catch (err) {
@@ -1615,7 +1615,7 @@ export default function MoleculeTablePage() {
       const fetchKpiData = async () => {
         try {
           setKpiLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/records');
+          const res = await axios.get('/api/feishu/records');
           const processedTableData = processTableData(res.data as RawDataItem[], '全量数据');
           setKpiTableData(processedTableData);
         } catch (err) {
@@ -1635,7 +1635,7 @@ export default function MoleculeTablePage() {
       const fetchHcpData = async () => {
         try {
           setHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsHCP');
+          const res = await axios.get('/api/feishu/recordsHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'HCP');
           setHcpTableData(processedTableData);
         } catch (err) {
@@ -1655,7 +1655,7 @@ export default function MoleculeTablePage() {
       const fetchNonHcpData = async () => {
         try {
           setNonHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsNONHCP');
+          const res = await axios.get('/api/feishu/recordsNONHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'NON-HCP');
           setNonHcpTableData(processedTableData);
         } catch (err) {
@@ -1675,7 +1675,7 @@ export default function MoleculeTablePage() {
       const fetchKolData = async () => {
         try {
           setKolLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsKOL');
+          const res = await axios.get('/api/feishu/recordsKOL');
           const processedTableData = processTableData(res.data as RawDataItem[], 'KOL');
           setKolTableData(processedTableData);
         } catch (err) {
@@ -1695,7 +1695,7 @@ export default function MoleculeTablePage() {
       const fetchUgcData = async () => {
         try {
           setUgcLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsUGC');
+          const res = await axios.get('/api/feishu/recordsUGC');
           const processedTableData = processTableData(res.data as RawDataItem[], 'UGC');
           setUgcTableData(processedTableData);
         } catch (err) {
@@ -1716,7 +1716,7 @@ export default function MoleculeTablePage() {
         try {
           setPlatformLoading(true);
           // 请根据实际接口地址修改
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsDistribution');
+          const res = await axios.get('/api/feishu/recordsDistribution');
           const processedPlatformData = processPlatformData(
             res.data as RawDataItem[],
             '声量及互动量平台分布',

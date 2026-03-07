@@ -310,7 +310,7 @@ export default function DefinitionPage() {
     const fetchDefinitionData = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:3000/api/feishu/defination');
+        const response = await fetch('/api/feishu/defination');
 
         if (!response.ok) {
           throw new Error(`请求失败：${response.status} ${response.statusText}`);

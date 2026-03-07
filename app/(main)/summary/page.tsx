@@ -468,12 +468,12 @@ export default function SummaryPage() {
       setLoading(true);
 
       // 请求分子式数据
-      const moleculeRes = await fetch('http://localhost:3000/api/feishu/records');
+      const moleculeRes = await fetch('/api/feishu/records');
       if (!moleculeRes.ok) throw new Error('分子式接口请求失败');
       const moleculeDataAll: FeishuRecord[] = await moleculeRes.json();
 
       // 请求品牌数据
-      const brandRes = await fetch('http://localhost:3000/api/feishu/recordsBrand');
+      const brandRes = await fetch('/api/feishu/recordsBrand');
       if (!brandRes.ok) throw new Error('品牌接口请求失败');
       const brandDataAll: FeishuRecord[] = await brandRes.json();
 
@@ -565,7 +565,7 @@ export default function SummaryPage() {
   const fetchKPISummaryData = async () => {
     try {
       setAnalysisLoading(true);
-      const response = await fetch('http://localhost:3000/api/feishu/KPISummary');
+      const response = await fetch('/api/feishu/KPISummary');
       if (!response.ok) throw new Error('KPI总结数据获取失败');
       const data: KPISummaryRecord[] = await response.json();
 

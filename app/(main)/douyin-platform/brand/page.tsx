@@ -677,7 +677,7 @@ export default function BrandTablePage() {
       const fetchKpiData = async () => {
         try {
           setKpiLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsBrand');
+          const res = await axios.get('/api/feishu/recordsBrand');
           const processedTableData = processTableData(res.data as RawDataItem[], '全量数据');
           setKpiTableData(processedTableData);
         } catch (err) {
@@ -695,7 +695,7 @@ export default function BrandTablePage() {
       const fetchHcpData = async () => {
         try {
           setHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsBrandHCP');
+          const res = await axios.get('/api/feishu/recordsBrandHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'HCP');
           setHcpTableData(processedTableData);
         } catch (err) {
@@ -713,7 +713,7 @@ export default function BrandTablePage() {
       const fetchNonHcpData = async () => {
         try {
           setNonHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsBrandNONHCP');
+          const res = await axios.get('/api/feishu/recordsBrandNONHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'NON-HCP');
           setNonHcpTableData(processedTableData);
         } catch (err) {
@@ -731,7 +731,7 @@ export default function BrandTablePage() {
       const fetchKolData = async () => {
         try {
           setKolLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsBrandKOL');
+          const res = await axios.get('/api/feishu/recordsBrandKOL');
           const processedTableData = processTableData(res.data as RawDataItem[], 'KOL');
           setKolTableData(processedTableData);
         } catch (err) {
@@ -749,7 +749,7 @@ export default function BrandTablePage() {
       const fetchUgcData = async () => {
         try {
           setUgcLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsBrandUGC');
+          const res = await axios.get('/api/feishu/recordsBrandUGC');
           const processedTableData = processTableData(res.data as RawDataItem[], 'UGC');
           setUgcTableData(processedTableData);
         } catch (err) {
@@ -767,7 +767,7 @@ export default function BrandTablePage() {
       const fetchPlatformData = async () => {
         try {
           setPlatformLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/recordsBrandDistribution');
+          const res = await axios.get('/api/feishu/recordsBrandDistribution');
           const processedPlatformData = processPlatformData(
             res.data as RawDataItem[],
             '声量及互动量平台分布',
@@ -1963,13 +1963,13 @@ const HcpNonHcpComparePanel: React.FC<{
       try {
         // 加载HCP数据
         setHcpLoading(true);
-        const hcpRes = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandHCP');
+        const hcpRes = await axios.get('/api/feishu/DOUYINBrandHCP');
         const hcpProcessed = processTableData(hcpRes.data as RawDataItem[], 'HCP');
         setHcpCompareData(hcpProcessed);
 
         // 加载NON-HCP数据
         setNonHcpLoading(true);
-        const nonHcpRes = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandNONHCP');
+        const nonHcpRes = await axios.get('/api/feishu/DOUYINBrandNONHCP');
         const nonHcpProcessed = processTableData(nonHcpRes.data as RawDataItem[], 'NON-HCP');
         setNonHcpCompareData(nonHcpProcessed);
       } catch (err) {
@@ -2329,13 +2329,13 @@ const KolUgcComparePanel: React.FC<{
       try {
         // 加载KOL数据
         setKolLoading(true);
-        const kolRes = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandKOL');
+        const kolRes = await axios.get('/api/feishu/DOUYINBrandKOL');
         const kolProcessed = processTableData(kolRes.data as RawDataItem[], 'KOL');
         setKolCompareData(kolProcessed);
 
         // 加载UGC数据
         setUgcLoading(true);
-        const ugcRes = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandUGC');
+        const ugcRes = await axios.get('/api/feishu/DOUYINBrandUGC');
         const ugcProcessed = processTableData(ugcRes.data as RawDataItem[], 'UGC');
         setUgcCompareData(ugcProcessed);
       } catch (err) {
@@ -3004,7 +3004,7 @@ export default function BrandTablePage() {
       const fetchKpiData = async () => {
         try {
           setKpiLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINBrand');
+          const res = await axios.get('/api/feishu/DOUYINBrand');
           const processedTableData = processTableData(res.data as RawDataItem[], '全量数据');
           setKpiTableData(processedTableData);
         } catch (err) {
@@ -3024,7 +3024,7 @@ export default function BrandTablePage() {
       const fetchHcpData = async () => {
         try {
           setHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandHCP');
+          const res = await axios.get('/api/feishu/DOUYINBrandHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'HCP');
           setHcpTableData(processedTableData);
         } catch (err) {
@@ -3044,7 +3044,7 @@ export default function BrandTablePage() {
       const fetchNonHcpData = async () => {
         try {
           setNonHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandNONHCP');
+          const res = await axios.get('/api/feishu/DOUYINBrandNONHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'NON-HCP');
           setNonHcpTableData(processedTableData);
         } catch (err) {
@@ -3064,7 +3064,7 @@ export default function BrandTablePage() {
       const fetchKolData = async () => {
         try {
           setKolLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandKOL');
+          const res = await axios.get('/api/feishu/DOUYINBrandKOL');
           const processedTableData = processTableData(res.data as RawDataItem[], 'KOL');
           setKolTableData(processedTableData);
         } catch (err) {
@@ -3084,7 +3084,7 @@ export default function BrandTablePage() {
       const fetchUgcData = async () => {
         try {
           setUgcLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandUGC');
+          const res = await axios.get('/api/feishu/DOUYINBrandUGC');
           const processedTableData = processTableData(res.data as RawDataItem[], 'UGC');
           setUgcTableData(processedTableData);
         } catch (err) {
@@ -3105,7 +3105,7 @@ export default function BrandTablePage() {
         try {
           setPlatformLoading(true);
           // 请根据实际接口地址修改
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINBrandDistribution');
+          const res = await axios.get('/api/feishu/DOUYINBrandDistribution');
           const processedPlatformData = processPlatformData(
             res.data as RawDataItem[],
             '声量及互动量平台分布',

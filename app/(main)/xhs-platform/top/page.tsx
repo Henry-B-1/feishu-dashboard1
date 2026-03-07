@@ -117,7 +117,7 @@ export default function DouyinPosts() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await axios.get('http://localhost:3000/api/feishu/XHS');
+        const res = await axios.get('/api/feishu/XHS');
         // 筛选目标数据并格式化
         const formatted = res.data
           .filter((item: any) => item.fields?.['标题'] === '重点分子式TOP热帖（红书）')

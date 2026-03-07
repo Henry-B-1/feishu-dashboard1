@@ -205,7 +205,7 @@ export default function KOLMatrixPage() {
     try {
       setLoading(true);
       const formattedMonth = formatMonth(month);
-      const response = await fetch(`http://localhost:3000/api/feishu/DOUYINMoleculeKOL?month=${encodeURIComponent(formattedMonth)}`);
+      const response = await fetch(`/api/feishu/DOUYINMoleculeKOL?month=${encodeURIComponent(formattedMonth)}`);
 
       if (!response.ok) {
         throw new Error(`HTTP错误，状态码：${response.status}`);

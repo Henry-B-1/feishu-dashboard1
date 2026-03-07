@@ -577,13 +577,13 @@ const HcpNonHcpComparePanel: React.FC<{
       try {
         // 加载HCP数据
         setHcpLoading(true);
-        const hcpRes = await axios.get('http://localhost:3000/api/feishu/DOUYINHCP');
+        const hcpRes = await axios.get('/api/feishu/DOUYINHCP');
         const hcpProcessed = processTableData(hcpRes.data as RawDataItem[], 'HCP');
         setHcpCompareData(hcpProcessed);
 
         // 加载NON-HCP数据
         setNonHcpLoading(true);
-        const nonHcpRes = await axios.get('http://localhost:3000/api/feishu/DOUYINNONHCP');
+        const nonHcpRes = await axios.get('/api/feishu/DOUYINNONHCP');
         const nonHcpProcessed = processTableData(nonHcpRes.data as RawDataItem[], 'NON-HCP');
         setNonHcpCompareData(nonHcpProcessed);
       } catch (err) {
@@ -942,13 +942,13 @@ const KolUgcComparePanel: React.FC<{
       try {
         // 加载KOL数据
         setKolLoading(true);
-        const kolRes = await axios.get('http://localhost:3000/api/feishu/DOUYINKOL');
+        const kolRes = await axios.get('/api/feishu/DOUYINKOL');
         const kolProcessed = processTableData(kolRes.data as RawDataItem[], 'KOL');
         setKolCompareData(kolProcessed);
 
         // 加载UGC数据
         setUgcLoading(true);
-        const ugcRes = await axios.get('http://localhost:3000/api/feishu/DOUYINUGC');
+        const ugcRes = await axios.get('/api/feishu/DOUYINUGC');
         const ugcProcessed = processTableData(ugcRes.data as RawDataItem[], 'UGC');
         setUgcCompareData(ugcProcessed);
       } catch (err) {
@@ -1615,7 +1615,7 @@ export default function MoleculeTablePage() {
       const fetchKpiData = async () => {
         try {
           setKpiLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYIN');
+          const res = await axios.get('/api/feishu/DOUYIN');
           const processedTableData = processTableData(res.data as RawDataItem[], '全量数据');
           setKpiTableData(processedTableData);
         } catch (err) {
@@ -1635,7 +1635,7 @@ export default function MoleculeTablePage() {
       const fetchHcpData = async () => {
         try {
           setHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINHCP');
+          const res = await axios.get('/api/feishu/DOUYINHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'HCP');
           setHcpTableData(processedTableData);
         } catch (err) {
@@ -1655,7 +1655,7 @@ export default function MoleculeTablePage() {
       const fetchNonHcpData = async () => {
         try {
           setNonHcpLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINNONHCP');
+          const res = await axios.get('/api/feishu/DOUYINNONHCP');
           const processedTableData = processTableData(res.data as RawDataItem[], 'NON-HCP');
           setNonHcpTableData(processedTableData);
         } catch (err) {
@@ -1675,7 +1675,7 @@ export default function MoleculeTablePage() {
       const fetchKolData = async () => {
         try {
           setKolLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINKOL');
+          const res = await axios.get('/api/feishu/DOUYINKOL');
           const processedTableData = processTableData(res.data as RawDataItem[], 'KOL');
           setKolTableData(processedTableData);
         } catch (err) {
@@ -1695,7 +1695,7 @@ export default function MoleculeTablePage() {
       const fetchUgcData = async () => {
         try {
           setUgcLoading(true);
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINUGC');
+          const res = await axios.get('/api/feishu/DOUYINUGC');
           const processedTableData = processTableData(res.data as RawDataItem[], 'UGC');
           setUgcTableData(processedTableData);
         } catch (err) {
@@ -1716,7 +1716,7 @@ export default function MoleculeTablePage() {
         try {
           setPlatformLoading(true);
           // 请根据实际接口地址修改
-          const res = await axios.get('http://localhost:3000/api/feishu/DOUYINDistribution');
+          const res = await axios.get('/api/feishu/DOUYINDistribution');
           const processedPlatformData = processPlatformData(
             res.data as RawDataItem[],
             '声量及互动量平台分布',
