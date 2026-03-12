@@ -87,6 +87,9 @@ interface KPISummaryRecord {
   record_id: string;
 }
 
+const TARGET_MOLECULE = '氮䓬斯汀氟替卡松';
+const TARGET_BRAND= '迪敏思';
+
 // ======== 修复：通用化工具函数，兼容所有未来年份 ========
 // 辅助函数：将月份字符串（如Aug-25、Jan-27）转换为可排序的日期对象
 const parseMonthString = (monthStr: string): Date => {
@@ -486,7 +489,7 @@ export default function SummaryPage() {
 
       // 解析分子式数据
       const getMoleculeValue = (data: FeishuRecord[], indicator: string): number => {
-        const indicatorRecords = data.filter(r => r.fields.分析指标 === indicator);
+        const indicatorRecords = data.filter(r => r.fields.分析指标 === indicator && r.fields.分子式 === TARGET_MOLECULE);
         return indicatorRecords.reduce((sum, record) => {
           const value = parseValue(record.fields.值);
           return sum + value;
@@ -519,7 +522,7 @@ export default function SummaryPage() {
 
       // 解析品牌数据
       const getBrandValue = (data: FeishuRecord[], indicator: string): number => {
-        const indicatorRecords = data.filter(r => r.fields.分析指标 === indicator);
+        const indicatorRecords = data.filter(r => r.fields.分析指标 === indicator && r.fields.品牌 === TARGET_BRAND);
         return indicatorRecords.reduce((sum, record) => {
           const value = parseValue(record.fields.值);
           return sum + value;

@@ -428,7 +428,7 @@ export default function KOLMatrixPage() {
         {
           // 左侧Y轴：互动量
           type: 'value',
-          name: '互动量',
+          name: '声量',
           nameTextStyle: { fontSize: 13, color: '#475569' },
           nameGap: 15,
           axisLabel: { fontSize: 13, color: '#475569', formatter: (value: number) => formatNumberWithCommas(value) },
@@ -439,7 +439,7 @@ export default function KOLMatrixPage() {
         {
           // 右侧Y轴：声量（关键修改）
           type: 'value',
-          name: '声量',
+          name: '互动量',
           nameTextStyle: { fontSize: 13, color: '#475569' },
           nameGap: 15,
           axisLabel: { fontSize: 13, color: '#475569', formatter: (value: number) => formatNumberWithCommas(value) },
@@ -834,7 +834,7 @@ export default function KOLMatrixPage() {
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
-              gap: '5px',
+              gap: '3px',
               width: '100%'
             }}>
               {Object.entries(kolData).map(([molecule, tierData]) => {
@@ -889,7 +889,7 @@ export default function KOLMatrixPage() {
                     }}>
                       <h3 style={{
                         color: 'white',
-                        fontSize: '12px',
+                        fontSize: '15px',
                         fontWeight: 700,
                         margin: 0,
                         textTransform: 'uppercase',
@@ -909,7 +909,7 @@ export default function KOLMatrixPage() {
                         width: '100%',
                         borderCollapse: 'collapse',
                         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                        fontSize: '8px',
+                        fontSize: '10px',
                         tableLayout: 'fixed'
                       }}>
                         {/* 统一的表头样式 */}
@@ -920,7 +920,7 @@ export default function KOLMatrixPage() {
                             {/* 9列统一样式 - 固定宽度比例 */}
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -931,7 +931,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -942,7 +942,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -953,7 +953,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -964,7 +964,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -975,7 +975,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -986,7 +986,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -997,7 +997,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -1008,7 +1008,7 @@ export default function KOLMatrixPage() {
                             </th>
                             <th style={{
                               color: 'white',
-                              fontSize: '10px',
+                              fontSize: '13px',
                               fontWeight: 600,
                               padding: '10px 0',
                               textAlign: 'center',
@@ -1058,7 +1058,8 @@ export default function KOLMatrixPage() {
                                   padding: '10px 0',
                                   textAlign: 'center',
                                   color: '#212529',
-                                  fontWeight: 500
+                                  fontWeight: 500,
+                                  fontSize: '13px'
                                 }}>
                                   {typeof data.声量 === 'string' && NO_DATA_REGEX.test(data.声量)
                                     ? <span className="text-gray-900">{data.声量}</span>
@@ -1070,7 +1071,8 @@ export default function KOLMatrixPage() {
                                   padding: '10px 0',
                                   textAlign: 'center',
                                   color: '#212529',
-                                  fontWeight: 500
+                                  fontWeight: 500,
+                                  fontSize: '13px'
                                 }}>
                                   {typeof data.声量占比 === 'string' && NO_DATA_REGEX.test(data.声量占比) ? (
                                     <span className="text-gray-900">{data.声量占比}</span>
@@ -1090,7 +1092,8 @@ export default function KOLMatrixPage() {
                                 <td style={{
                                   padding: '10px 0',
                                   textAlign: 'center',
-                                  fontWeight: 600,
+                                  fontWeight: 500,
+                                  fontSize: '13px'
                                 }}>
                                   {renderTrend(data.声量月环比)}
                                 </td>
@@ -1100,7 +1103,8 @@ export default function KOLMatrixPage() {
                                   padding: '10px 0',
                                   textAlign: 'center',
                                   color: '#212529',
-                                  fontWeight: 500
+                                  fontWeight: 500,
+                                  fontSize: '13px'
                                 }}>
                                   {typeof data.互动量 === 'string' && NO_DATA_REGEX.test(data.互动量)
                                     ? <span className="text-gray-900">{data.互动量}</span>
@@ -1112,7 +1116,8 @@ export default function KOLMatrixPage() {
                                   padding: '10px 0',
                                   textAlign: 'center',
                                   color: '#212529',
-                                  fontWeight: 500
+                                  fontWeight: 500,
+                                  fontSize: '13px'
                                 }}>
                                   {typeof data.互动量占比 === 'string' && NO_DATA_REGEX.test(data.互动量占比) ? (
                                     <span className="text-gray-900">{data.互动量占比}</span>
@@ -1133,6 +1138,7 @@ export default function KOLMatrixPage() {
                                   padding: '10px 0',
                                   textAlign: 'center',
                                   fontWeight: 600,
+                                  fontSize: '13px'
                                 }}>
                                   {renderTrend(data.互动量月环比)}
                                 </td>
@@ -1142,7 +1148,8 @@ export default function KOLMatrixPage() {
                                   padding: '10px 0',
                                   textAlign: 'center',
                                   color: '#212529',
-                                  fontWeight: 500
+                                  fontWeight: 500,
+                                  fontSize: '13px'
                                 }}>
                                   {typeof data.单帖互动量 === 'string' && NO_DATA_REGEX.test(data.单帖互动量)
                                     ? <span className="text-gray-900">{data.单帖互动量}</span>
@@ -1154,6 +1161,7 @@ export default function KOLMatrixPage() {
                                   padding: '10px 0',
                                   textAlign: 'center',
                                   fontWeight: 600,
+                                  fontSize: '13px'
                                 }}>
                                   {renderTrend(data.单帖互动量月环比)}
                                 </td>

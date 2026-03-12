@@ -1,16 +1,48 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
+import { useMonthContext } from '@/app/(main)/context/MonthContext'; // 引入月份上下文
 import {
   TrendingUp, MessageSquare, BarChart2,
   Filter, Award, AlertCircle,
   ThumbsUp, Meh, ThumbsDown,
-  Eye, Users, Percent
+  Eye, Users, Percent, Info
 } from 'lucide-react';
 
-// 模拟原数据（实际项目可替换为接口请求）
-const commentData = {
+// 主题配置
+const THEME = {
+  primary: '#6366F1',
+  primaryLight: '#818CF8',
+  primaryDark: '#4F46E5',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  background: '#F8FAFC',
+  cardBg: '#FFFFFF',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textTertiary: '#9CA3AF',
+  border: '#E5E7EB',
+  shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+  shadowHover: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+  radius: {
+    sm: '6px',
+    md: '12px',
+    lg: '16px',
+    xl: '24px'
+  }
+};
+
+// 情感颜色配置
+const EMOTION_COLORS = {
+  '正面': '#91cc75',   // brand页面的绿色
+  '中性': '#5470c6',   // brand页面的蓝色
+  '负面': '#ee6666'    // brand页面的红色
+};
+
+// 静态备用数据（无数据月份使用）
+const STATIC_COMMENT_DATA = {
   "氮䓬斯汀氟替卡松": {
     评论总数: 19800,
     有效评论: 2689,
@@ -67,45 +99,190 @@ const commentData = {
   }
 };
 
-// 主题配置
-const THEME = {
-  primary: '#6366F1',
-  primaryLight: '#818CF8',
-  primaryDark: '#4F46E5',
-  success: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  background: '#F8FAFC',
-  cardBg: '#FFFFFF',
-  textPrimary: '#111827',
-  textSecondary: '#6B7280',
-  textTertiary: '#9CA3AF',
-  border: '#E5E7EB',
-  shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-  shadowHover: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-  radius: {
-    sm: '6px',
-    md: '12px',
-    lg: '16px',
-    xl: '24px'
-  }
-};
+// 类型定义
+interface FeishuRecord {
+  fields: {
+    原话示例: string;
+    '情感占比 (%)': string;
+    情感类型: string;
+    情感评论数: string;
+    数据类型: string;
+    日期: string;
+    '有效占比 (%)': string;
+    有效评论数: string;
+    药品名称: string;
+    评论总数: string;
+    话题分类: string;
+    '话题占比 (%)': string;
+    话题名称: string;
+  };
+  id: string;
+  record_id: string;
+}
 
-// 情感颜色配置（和brand页面配色对齐）
-const EMOTION_COLORS = {
-  '正面': '#91cc75',   // brand页面的绿色
-  '中性': '#5470c6',   // brand页面的蓝色
-  '负面': '#ee6666'    // brand页面的红色
-};
+interface ProcessedData {
+  [key: string]: {
+    评论总数: number;
+    有效评论: number;
+    有效占比: number;
+    情感分布: Array<{
+      name: string;
+      value: number;
+      占比: number;
+      icon: React.ReactNode;
+    }>;
+    话题数据: {
+      正面话题: Array<{ 话题: string; 占比: number; 原话: string }>;
+      中性话题: Array<{ 话题: string; 占比: number; 原话: string }>;
+      负面话题: Array<{ 话题: string; 占比: number; 原话: string }>;
+    };
+  };
+}
 
 export default function CommentAnalysisPage() {
+  // 引入月份上下文
+  const { selectedMonth } = useMonthContext();
+
+  // 状态管理
   const [activeMolecule, setActiveMolecule] = useState('氮䓬斯汀氟替卡松');
   const [activeTab, setActiveTab] = useState('正面话题');
-  const currentData = useMemo(() => commentData[activeMolecule as keyof typeof commentData], [activeMolecule]);
+  const [commentData, setCommentData] = useState<ProcessedData>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [hasShownModal, setHasShownModal] = useState(false);
+  const [isUsingStaticData, setIsUsingStaticData] = useState(false); // 标记是否使用静态数据
 
   // ECharts 引用
   const emotionPieRef = useRef<any>(null);
   const topicBarRef = useRef<any>(null);
+
+  // 复制功能状态
+  const [copySuccess, setCopySuccess] = useState('');
+
+  // 获取数据逻辑（区分有数据/无数据月份）
+  const fetchCommentData = async (targetMonth: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/feishu/DOUYINComment');
+
+      if (!response.ok) {
+        throw new Error(`请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const rawData: FeishuRecord[] = await response.json();
+
+      // 根据选中的月份筛选数据
+      const filteredData = rawData.filter(record => {
+        return record.fields.日期 === targetMonth;
+      });
+
+      // 判断是否有数据
+      if (filteredData.length > 0) {
+        // 有数据 - 处理接口数据
+        const processedData = processFeishuData(filteredData);
+        setCommentData(processedData);
+        setIsUsingStaticData(false);
+
+        // 默认选中第一个药品
+        const firstMolecule = Object.keys(processedData)[0];
+        if (firstMolecule) {
+          setActiveMolecule(firstMolecule);
+        }
+      } else {
+        // 无数据 - 使用静态数据
+        setCommentData(STATIC_COMMENT_DATA as ProcessedData);
+        setIsUsingStaticData(true);
+        setActiveMolecule('氮䓬斯汀氟替卡松'); // 静态数据默认选中
+      }
+
+      setError('');
+    } catch (err) {
+      console.error('获取数据失败:', err);
+      setError('数据加载失败，请刷新页面重试');
+      // 接口异常时也使用静态数据
+      setCommentData(STATIC_COMMENT_DATA as ProcessedData);
+      setIsUsingStaticData(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 监听月份变化，重新加载数据
+  useEffect(() => {
+    if (selectedMonth) {
+      fetchCommentData(selectedMonth);
+    }
+  }, [selectedMonth]);
+
+  // 页面加载完成后显示提示弹窗
+  useEffect(() => {
+    if (!loading && !hasShownModal) {
+      setShowInfoModal(true);
+      setHasShownModal(true);
+    }
+  }, [loading, hasShownModal]);
+
+  // 处理飞书接口数据
+  const processFeishuData = (rawData: FeishuRecord[]): ProcessedData => {
+    const result: ProcessedData = {};
+
+    // 按药品名称分组
+    rawData.forEach(record => {
+      const fields = record.fields;
+      const moleculeName = fields.药品名称;
+
+      // 初始化药品数据结构
+      if (!result[moleculeName]) {
+        result[moleculeName] = {
+          评论总数: parseInt(fields.评论总数 || '0'),
+          有效评论: parseInt(fields.有效评论数 || '0'),
+          有效占比: parseFloat(fields['有效占比 (%)'] || '0'),
+          情感分布: [],
+          话题数据: {
+            正面话题: [],
+            中性话题: [],
+            负面话题: []
+          }
+        };
+      }
+
+      const moleculeData = result[moleculeName];
+
+      // 处理情感分布数据
+      if (fields.数据类型 === '情感分布' && fields.情感类型 !== '-') {
+        const emotionIcon = fields.情感类型 === '正面' ? <ThumbsUp size={16} /> :
+                           fields.情感类型 === '中性' ? <Meh size={16} /> :
+                           <ThumbsDown size={16} />;
+
+        moleculeData.情感分布.push({
+          name: fields.情感类型,
+          value: parseInt(fields.情感评论数 || '0'),
+          占比: parseFloat(fields['情感占比 (%)'] || '0'),
+          icon: emotionIcon
+        });
+      }
+
+      // 处理话题数据
+      if (fields.数据类型 === '话题详情' && fields.话题分类 !== '-') {
+        moleculeData.话题数据[fields.话题分类 as keyof typeof moleculeData.话题数据].push({
+          话题: fields.话题名称 || '',
+          占比: parseFloat(fields['话题占比 (%)'] || '0'),
+          原话: fields.原话示例 || ''
+        });
+      }
+    });
+
+    return result;
+  };
+
+  // 获取当前药品数据
+  const currentData = useMemo(() => {
+    if (!commentData || !commentData[activeMolecule]) {
+      return STATIC_COMMENT_DATA[activeMolecule as keyof typeof STATIC_COMMENT_DATA];
+    }
+    return commentData[activeMolecule];
+  }, [commentData, activeMolecule]);
 
   // 获取当前话题标签的颜色
   const getTabColor = () => {
@@ -117,8 +294,7 @@ export default function CommentAnalysisPage() {
     }
   };
 
-  // ========== ECharts 配置 ==========
-  // 情感分布饼图配置（和brand页面样式对齐）
+  // ECharts 配置
   const getEmotionPieOption = () => {
     const pieData = currentData.情感分布.map(item => ({
       name: item.name,
@@ -186,7 +362,6 @@ export default function CommentAnalysisPage() {
     };
   };
 
-  // 话题分析柱状图配置（和brand页面样式对齐）
   const getTopicBarOption = () => {
     const topicData = currentData.话题数据[activeTab as keyof typeof currentData.话题数据];
     const topics = topicData.map(item => item.话题);
@@ -313,9 +488,7 @@ export default function CommentAnalysisPage() {
     };
   };
 
-  // ========== 复制功能（和brand页面对齐） ==========
-  const [copySuccess, setCopySuccess] = useState('');
-
+  // 复制功能
   const copyToClipboard = (text: string, tip: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopySuccess(tip);
@@ -323,7 +496,6 @@ export default function CommentAnalysisPage() {
     });
   };
 
-  // 复制情感分布数据
   const copyEmotionData = () => {
     const lines = ['情感类型\t占比(%)\t评论数'];
     currentData.情感分布.forEach(item => {
@@ -332,7 +504,6 @@ export default function CommentAnalysisPage() {
     copyToClipboard(lines.join('\n'), `情感分布数据已复制，可直接粘贴到 Excel`);
   };
 
-  // 复制话题数据
   const copyTopicData = () => {
     const topicData = currentData.话题数据[activeTab as keyof typeof currentData.话题数据];
     const lines = [`${activeTab}\t占比(%)\t原话`];
@@ -342,7 +513,6 @@ export default function CommentAnalysisPage() {
     copyToClipboard(lines.join('\n'), `${activeTab}数据已复制，可直接粘贴到 Excel`);
   };
 
-  // 复制按钮样式
   const copyBtnStyle: React.CSSProperties = {
     marginTop: 12,
     padding: '6px 14px',
@@ -354,6 +524,152 @@ export default function CommentAnalysisPage() {
     transition: 'all 0.2s',
   };
 
+  // 加载中状态组件
+  const LoadingComponent = () => (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '60vh',
+      flexDirection: 'column',
+      gap: '16px'
+    }}>
+      <div style={{
+        width: '40px',
+        height: '40px',
+        border: '4px solid #e2e8f0',
+        borderTop: `4px solid ${THEME.primary}`,
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite'
+      }}></div>
+      <p style={{ color: THEME.textSecondary, fontSize: '16px' }}>正在加载{selectedMonth}的评论数据...</p>
+      <style jsx global>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+
+  // 错误状态组件
+  const ErrorComponent = () => (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '60vh',
+      flexDirection: 'column',
+      gap: '16px',
+      padding: '24px'
+    }}>
+      <AlertCircle size={48} color={THEME.danger} />
+      <p style={{ color: THEME.textPrimary, fontSize: '18px', fontWeight: 600 }}>{error}</p>
+      <button
+        style={{
+          padding: '8px 16px',
+          backgroundColor: THEME.primary,
+          color: 'white',
+          border: 'none',
+          borderRadius: THEME.radius.sm,
+          cursor: 'pointer',
+          fontSize: '14px'
+        }}
+        onClick={() => window.location.reload()}
+      >
+        刷新页面
+      </button>
+    </div>
+  );
+
+  // 信息提示弹窗组件
+  const InfoModal = () => (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 9999,
+      backdropFilter: 'blur(2px)'
+    }}>
+      <div style={{
+        backgroundColor: THEME.cardBg,
+        borderRadius: THEME.radius.lg,
+        padding: '24px',
+        maxWidth: '500px',
+        width: '90%',
+        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+        border: `1px solid ${THEME.border}`
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '16px',
+          paddingBottom: '16px',
+          borderBottom: `1px solid ${THEME.border}`
+        }}>
+          <Info size={24} color={THEME.warning} />
+          <h3 style={{
+            margin: 0,
+            fontSize: '18px',
+            fontWeight: 600,
+            color: THEME.textPrimary
+          }}>
+            重要提示
+          </h3>
+        </div>
+
+        <p style={{
+          fontSize: '14px',
+          color: THEME.textSecondary,
+          lineHeight: 1.6,
+          margin: '0 0 20px 0'
+        }}>
+          {isUsingStaticData
+            ? `当前月份(${selectedMonth})暂无实际数据，展示的内容为模板参考数据，仅在过敏高发季（3-4月/8-9月）提供真实数据分析。`
+            : `本页内容仅在过敏高发季（3-4月/8-9月）进行分析，当前展示的${selectedMonth}数据为真实用户评论分析结果。`
+          }
+        </p>
+
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end'
+        }}>
+          <button
+            style={{
+              padding: '8px 16px',
+              backgroundColor: THEME.primary,
+              color: 'white',
+              border: 'none',
+              borderRadius: THEME.radius.sm,
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'all 0.2s'
+            }}
+            onClick={() => setShowInfoModal(false)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = THEME.primaryDark;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = THEME.primary;
+            }}
+          >
+            我知道了
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (loading) return <LoadingComponent />;
+  if (error) return <ErrorComponent />;
+
   return (
     <div style={{
       width: '100%',
@@ -361,7 +677,10 @@ export default function CommentAnalysisPage() {
       background: THEME.background,
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
     }}>
-      {/* 复制成功提示（和brand页面对齐） */}
+      {/* 弹窗提示 */}
+      {showInfoModal && <InfoModal />}
+
+      {/* 复制成功提示 */}
       {copySuccess && (
         <div style={{
           position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
@@ -404,6 +723,31 @@ export default function CommentAnalysisPage() {
                 gap: '12px'
               }}>
                 重点分子式KOL/KOC发帖评论分析
+                {/* 显示数据类型标签 */}
+                <span style={{
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  background: isUsingStaticData ? 'rgba(245, 158, 11, 0.9)' : 'rgba(16, 185, 129, 0.9)',
+                  color: 'white',
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  {isUsingStaticData ? <AlertCircle size={14} /> : <Info size={14} />}
+                  {isUsingStaticData ? '模板参考数据' : '真实数据分析'}
+                </span>
+                {/* 显示选中的月份 */}
+                <span style={{
+                  fontSize: '16px',
+                  fontWeight: 400,
+                  background: 'rgba(255,255,255,0.2)',
+                  padding: '4px 12px',
+                  borderRadius: '16px'
+                }}>
+                  {selectedMonth}
+                </span>
               </h1>
               <p style={{
                 fontSize: '14px',
@@ -481,6 +825,21 @@ export default function CommentAnalysisPage() {
               <Award size={12} />
               仅在过敏高发季分析（3-4月/8-9月）
             </div>
+            {/* 数据类型提示标签 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: isUsingStaticData ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              fontSize: '12px',
+              color: 'white',
+              border: isUsingStaticData ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)'
+            }}>
+              {isUsingStaticData ? <Info size={12} /> : <Success size={12} />}
+              {isUsingStaticData ? '本页内容仅作模板参考' : '本页展示真实数据分析结果'}
+            </div>
           </div>
         </div>
       </div>
@@ -505,6 +864,22 @@ export default function CommentAnalysisPage() {
             position: 'relative',
             overflow: 'hidden'
           }}>
+            {/* 静态数据标记 */}
+            {isUsingStaticData && (
+              <div style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                fontSize: 10,
+                color: THEME.warning,
+                background: 'rgba(245, 158, 11, 0.1)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: `1px solid ${THEME.warning}30`
+              }}>
+                参考数据
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{
                 fontSize: '14px',
@@ -547,6 +922,22 @@ export default function CommentAnalysisPage() {
             position: 'relative',
             overflow: 'hidden'
           }}>
+            {/* 静态数据标记 */}
+            {isUsingStaticData && (
+              <div style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                fontSize: 10,
+                color: THEME.warning,
+                background: 'rgba(245, 158, 11, 0.1)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: `1px solid ${THEME.warning}30`
+              }}>
+                参考数据
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{
                 fontSize: '14px',
@@ -589,6 +980,22 @@ export default function CommentAnalysisPage() {
             position: 'relative',
             overflow: 'hidden'
           }}>
+            {/* 静态数据标记 */}
+            {isUsingStaticData && (
+              <div style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                fontSize: 10,
+                color: THEME.warning,
+                background: 'rgba(245, 158, 11, 0.1)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: `1px solid ${THEME.warning}30`
+              }}>
+                参考数据
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{
                 fontSize: '14px',
@@ -621,7 +1028,7 @@ export default function CommentAnalysisPage() {
           </div>
         </div>
 
-        {/* 主分析区域 - 采用brand页面的布局和样式 */}
+        {/* 主分析区域 */}
         <div style={{
           display: 'flex',
           gap: '24px',
@@ -630,7 +1037,7 @@ export default function CommentAnalysisPage() {
           justifyContent: 'center',
           marginBottom: '24px'
         }}>
-          {/* 情感分布卡片 - ECharts版本 */}
+          {/* 情感分布卡片 */}
           <div style={{
             width: '48%',
             minWidth: '400px',
@@ -642,7 +1049,8 @@ export default function CommentAnalysisPage() {
             boxSizing: 'border-box',
             display: 'flex',
             flexDirection: 'column',
-            transition: 'all 0.2s ease'
+            transition: 'all 0.2s ease',
+            position: 'relative'
           }}
             onMouseEnter={(e) => {
               e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
@@ -653,6 +1061,23 @@ export default function CommentAnalysisPage() {
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
+            {/* 静态数据标记 */}
+            {isUsingStaticData && (
+              <div style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                fontSize: 10,
+                color: THEME.warning,
+                background: 'rgba(245, 158, 11, 0.1)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: `1px solid ${THEME.warning}30`,
+                zIndex: 1
+              }}>
+                参考数据
+              </div>
+            )}
             <div style={{ flex: 1, height: 'calc(100% - 40px)' }}>
               <ReactECharts
                 ref={emotionPieRef}
@@ -669,7 +1094,7 @@ export default function CommentAnalysisPage() {
             </button>
           </div>
 
-          {/* 话题分析卡片 - ECharts版本 */}
+          {/* 话题分析卡片 */}
           <div style={{
             width: '48%',
             minWidth: '400px',
@@ -681,7 +1106,8 @@ export default function CommentAnalysisPage() {
             boxSizing: 'border-box',
             display: 'flex',
             flexDirection: 'column',
-            transition: 'all 0.2s ease'
+            transition: 'all 0.2s ease',
+            position: 'relative'
           }}
             onMouseEnter={(e) => {
               e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
@@ -692,6 +1118,23 @@ export default function CommentAnalysisPage() {
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
+            {/* 静态数据标记 */}
+            {isUsingStaticData && (
+              <div style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                fontSize: 10,
+                color: THEME.warning,
+                background: 'rgba(245, 158, 11, 0.1)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: `1px solid ${THEME.warning}30`,
+                zIndex: 1
+              }}>
+                参考数据
+              </div>
+            )}
             {/* 话题标签页 */}
             <div style={{
               display: 'flex',
@@ -735,7 +1178,6 @@ export default function CommentAnalysisPage() {
                 style={{ width: '100%', height: '100%' }}
                 onEvents={{
                   resize: () => topicBarRef.current?.getEchartsInstance().resize(),
-                  // 切换tab时重新渲染图表
                   click: () => topicBarRef.current?.getEchartsInstance().setOption(getTopicBarOption())
                 }}
               />
@@ -756,8 +1198,25 @@ export default function CommentAnalysisPage() {
           borderRadius: THEME.radius.lg,
           padding: '24px',
           boxShadow: THEME.shadow,
-          marginBottom: '24px'
+          marginBottom: '24px',
+          position: 'relative'
         }}>
+          {/* 静态数据标记 */}
+          {isUsingStaticData && (
+            <div style={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              fontSize: 10,
+              color: THEME.warning,
+              background: 'rgba(245, 158, 11, 0.1)',
+              padding: '2px 8px',
+              borderRadius: 4,
+              border: `1px solid ${THEME.warning}30`
+            }}>
+              参考数据
+            </div>
+          )}
           <h2 style={{
             fontSize: '18px',
             fontWeight: 600,
@@ -768,80 +1227,92 @@ export default function CommentAnalysisPage() {
             alignItems: 'center',
             gap: '8px'
           }}>
-            <Eye size={20} color={THEME.primary} />
             {activeTab} 详情
           </h2>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: '16px',
-            maxHeight: '300px',
-            overflowY: 'auto',
-            paddingRight: '8px'
-          }}>
-            {currentData.话题数据[activeTab as keyof typeof currentData.话题数据].map((item, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: getTabColor() + '10',
-                  borderRadius: THEME.radius.md,
-                  padding: '16px',
-                  border: `1px solid ${getTabColor()}30`,
-                  transition: 'all 0.3s ease',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = THEME.shadowHover;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '12px'
-                }}>
-                  <span style={{
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    color: getTabColor(),
-                    flex: 1
+          {currentData.话题数据[activeTab as keyof typeof currentData.话题数据].length === 0 ? (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '200px',
+              color: THEME.textTertiary,
+              fontSize: '14px'
+            }}>
+              暂无{activeTab}数据
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: '16px',
+              maxHeight: '300px',
+              overflowY: 'auto',
+              paddingRight: '8px'
+            }}>
+              {currentData.话题数据[activeTab as keyof typeof currentData.话题数据].map((item, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: getTabColor() + '10',
+                    borderRadius: THEME.radius.md,
+                    padding: '16px',
+                    border: `1px solid ${getTabColor()}30`,
+                    transition: 'all 0.3s ease',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = THEME.shadowHover;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '12px'
                   }}>
-                    {item.话题}
-                  </span>
-                  <span style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: 'white',
-                    background: getTabColor(),
-                    padding: '4px 12px',
-                    borderRadius: '20px',
-                    flexShrink: 0
+                    <span style={{
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      color: getTabColor(),
+                      flex: 1
+                    }}>
+                      {item.话题}
+                    </span>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: 'white',
+                      background: getTabColor(),
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      flexShrink: 0
+                    }}>
+                      {item.占比}%
+                    </span>
+                  </div>
+                  <p style={{
+                    fontSize: '13px',
+                    color: THEME.textSecondary,
+                    margin: 0,
+                    lineHeight: 1.6,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
                   }}>
-                    {item.占比}%
-                  </span>
+                    "{item.原话}"
+                  </p>
                 </div>
-                <p style={{
-                  fontSize: '13px',
-                  color: THEME.textSecondary,
-                  margin: 0,
-                  lineHeight: 1.6,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  "{item.原话}"
-                </p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 页脚说明 */}
@@ -857,7 +1328,7 @@ export default function CommentAnalysisPage() {
             alignItems: 'flex-start',
             gap: '12px'
           }}>
-            <AlertCircle size={20} color={THEME.primary} />
+            <AlertCircle size={20} color={isUsingStaticData ? THEME.warning : THEME.primary} />
             <div style={{ flex: 1 }}>
               <p style={{
                 fontSize: '13px',
@@ -865,12 +1336,36 @@ export default function CommentAnalysisPage() {
                 margin: 0,
                 lineHeight: 1.6
               }}>
-                <strong>数据说明：</strong>有效评论指围绕病症、症状、病因、产品等核心内容的用户反馈。仅对有效评论数大于200的品牌进行深度分析。本月丙酸氟替卡松、盐酸氮䓬斯汀因有效评论数未达标准，暂不纳入分析范围。
+                <strong>数据说明：</strong>
+                {isUsingStaticData
+                  ? `当前月份(${selectedMonth})暂无实际数据，展示的是模板参考数据。有效评论指围绕病症、症状、病因、产品等核心内容的用户反馈。仅在过敏高发季（3-4月/8-9月）提供真实数据分析。`
+                  : `有效评论指围绕病症、症状、病因、产品等核心内容的用户反馈。仅对有效评论数大于200的品牌进行深度分析。`
+                }
               </p>
             </div>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// 补充缺失的Success组件
+function Success(props: { size: number, color?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={props.size}
+      height={props.size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={props.color || "currentColor"}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
   );
 }

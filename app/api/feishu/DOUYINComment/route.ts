@@ -26,7 +26,7 @@ interface BitableRecordsResponse {
 const FEISHU_APP_ID = process.env.FEISHU_APP_ID;
 const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET;
 const BITABLE_APP_ID = process.env.FEISHU_BITABLE_APP_ID;
-const TABLE_ID = process.env.FEISHU_DOUYINBrandUGC_TABLE_ID;
+const TABLE_ID = process.env.FEISHU_DOUYINComment_TABLE_ID;
 
 // ========== 工具函数 ==========
 // 获取飞书 Token（通用逻辑，可抽离到 utils 避免重复）

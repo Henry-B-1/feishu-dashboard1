@@ -1491,7 +1491,7 @@ const getLineChartOption = (
   // 为每个品牌构建数据系列
   const series = brands.map((bra, index) => {
     // 为每个品牌分配颜色
-    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16'];
+    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16','#80a492', '#13c2c2'];
     // 提取该品牌在各月份的对应指标数据
     const data = sortedDates.map(month => {
       const value = grouped[month]?.[bra]?.[indicatorType] || '-';
@@ -1596,7 +1596,7 @@ const getAreaChartOption = (
   // 为每个品牌构建数据系列
   const series = brands.map((bra, index) => {
     // 为每个品牌分配颜色（与折线图保持一致）
-    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16','#fa8c16', '#a0d911', '#13c2c2'];
+    const colors = ['#1890ff', '#722ed1', '#f5222d', '#fa8c16', '#80a492', '#13c2c2'];
     // 提取该品牌在各月份的对应指标数据
     const data = sortedDates.map(month => {
       const value = grouped[month]?.[bra]?.[indicatorType] || '-';
