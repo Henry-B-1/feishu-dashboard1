@@ -51,13 +51,14 @@ interface ProcessedPlatformData {
 // 定义一级标签类型
 type MainTabType = 'kpiOverview' | 'hcpNonHcp' | 'kolUgc' | 'voicePlatformDistribution';
 // 🌟 修改：扩展二级标签类型，增加对比面板
-type SubTabType = 'hcp' | 'nonHcp' | 'hcpNonHcpCompare' | 'kol' | 'ugc' | 'kolUgcCompare';
+type SubTabType = 'hcp' | 'nonHcp' | 'hcpNonHcpCompare' | 'kol' | 'ugc' |'koc' | 'kolUgcCompare';
 
 // 一级标签配置
 const mainTabConfig = [
   { key: 'kpiOverview', label: 'KPI总览' },
   { key: 'hcpNonHcp', label: 'HCP/NON-HCP' },
-  { key: 'kolUgc', label: 'KOL/UGC' },
+  { key: 'kolUgc', label: 'KOL/KOC/UGC' },
+
   //{ key: 'voicePlatformDistribution', label: '声量及互动量平台分布' }
 ];
 
@@ -72,7 +73,9 @@ const subTabConfigs = {
   kolUgc: [
    { key: 'kolUgcCompare' as SubTabType, label: 'KOL/UGC对比' },
     { key: 'kol' as SubTabType, label: 'KOL' },
+    { key: 'koc' as SubTabType, label: 'KOC' },
     { key: 'ugc' as SubTabType, label: 'UGC' },
+
 
   ]
 };
@@ -816,7 +819,7 @@ const HcpNonHcpComparePanel: React.FC<{
 
 
 
-// 🌟 新增：KOL/UGC对比面板组件
+// 🌟 新增：KOL/UGC/KOC 对比面板组件
 const KolUgcComparePanel: React.FC<{
   copyBtnHovered: string | null;
   setCopyBtnHovered: (key: string | null) => void;
@@ -845,10 +848,18 @@ const KolUgcComparePanel: React.FC<{
     sortedDates: [],
     molecules: []
   });
+  // ✅ 新增 KOC 数据状态
+  const [kocCompareData, setKocCompareData] = useState<ProcessedTableData>({
+    grouped: {},
+    sortedDates: [],
+    molecules: []
+  });
 
   // 加载状态
   const [kolLoading, setKolLoading] = useState(false);
   const [ugcLoading, setUgcLoading] = useState(false);
+  // ✅ 新增 KOC 加载状态
+  const [kocLoading, setKocLoading] = useState(false);
 
   // 数据处理函数（复用主组件的逻辑）
   const processTableData = (rawData: RawDataItem[], splitType: string): ProcessedTableData => {
@@ -951,13 +962,21 @@ const KolUgcComparePanel: React.FC<{
         const ugcRes = await axios.get('/api/feishu/XHSUGC');
         const ugcProcessed = processTableData(ugcRes.data as RawDataItem[], 'UGC');
         setUgcCompareData(ugcProcessed);
+
+        // ✅ 加载KOC数据
+        setKocLoading(true);
+        const kocRes = await axios.get('/api/feishu/XHSKOC');
+        const kocProcessed = processTableData(kocRes.data as RawDataItem[], 'KOC');
+        setKocCompareData(kocProcessed);
+
       } catch (err) {
-        console.error('KOL/UGC对比数据加载失败:', err);
+        console.error('KOL/UGC/KOC对比数据加载失败:', err);
         setCopySuccess('数据加载失败，请刷新重试');
         setTimeout(() => setCopySuccess(''), 2000);
       } finally {
         setKolLoading(false);
         setUgcLoading(false);
+        setKocLoading(false);
       }
     };
 
@@ -1003,7 +1022,7 @@ const KolUgcComparePanel: React.FC<{
           </button>
         </div>
 
-        {/* 表格内容 - 和HCP/NON-HCP面板样式完全一致 */}
+        {/* 表格内容 */}
         <div style={tableStyles.container}>
           <table style={tableStyles.table}>
             <thead>
@@ -1082,9 +1101,13 @@ const KolUgcComparePanel: React.FC<{
     );
   };
 
-  // 批量复制两个表格数据
+  // 批量复制三个表格数据
   const copyAllCompareData = () => {
-    if (kolCompareData.sortedDates.length === 0 || ugcCompareData.sortedDates.length === 0) {
+    if (
+      kolCompareData.sortedDates.length === 0 ||
+      ugcCompareData.sortedDates.length === 0 ||
+      kocCompareData.sortedDates.length === 0
+    ) {
       setCopySuccess('暂无数据可复制');
       setTimeout(() => setCopySuccess(''), 1500);
       return;
@@ -1120,10 +1143,25 @@ const KolUgcComparePanel: React.FC<{
       ugcLines.push(row.join('\t'));
     });
 
+    // ✅ 构建KOC数据
+    const kocHeader = ['\nKOC - 月份'];
+    kocCompareData.molecules.forEach(mol => {
+      kocHeader.push(`${mol}-总声量`, `${mol}-SOV`, `${mol}-总互动量`, `${mol}-SOE`);
+    });
+    const kocLines = [kocHeader.join('\t')];
+    kocCompareData.sortedDates.forEach(date => {
+      const row = [date];
+      kocCompareData.molecules.forEach(mol => {
+        const data = kocCompareData.grouped[date][mol];
+        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+      });
+      kocLines.push(row.join('\t'));
+    });
+
     // 合并并复制
-    const allData = [...kolLines, ...ugcLines].join('\n');
+    const allData = [...kolLines, ...ugcLines, ...kocLines].join('\n');
     navigator.clipboard.writeText(allData).then(() => {
-      setCopySuccess('KOL/UGC对比数据已复制，可粘贴到Excel');
+      setCopySuccess('KOL/UGC/KOC对比数据已复制，可粘贴到Excel');
       setTimeout(() => setCopySuccess(''), 2000);
     }).catch(() => {
       setCopySuccess('复制失败，请手动复制');
@@ -1148,20 +1186,22 @@ const KolUgcComparePanel: React.FC<{
           fontWeight: 600,
           margin: 0
         }}>
-          KOL/UGC 数据对比
+          KOL / UGC / KOC 数据对比
         </h2>
         <button
           style={getCopyBtnStyle(
-            kolLoading || ugcLoading ||
+            kolLoading || ugcLoading || kocLoading ||
             kolCompareData.sortedDates.length === 0 ||
-            ugcCompareData.sortedDates.length === 0,
+            ugcCompareData.sortedDates.length === 0 ||
+            kocCompareData.sortedDates.length === 0,
             'kolugc-compare-all'
           )}
           onClick={copyAllCompareData}
           disabled={
-            kolLoading || ugcLoading ||
+            kolLoading || ugcLoading || kocLoading ||
             kolCompareData.sortedDates.length === 0 ||
-            ugcCompareData.sortedDates.length === 0
+            ugcCompareData.sortedDates.length === 0 ||
+            kocCompareData.sortedDates.length === 0
           }
           onMouseEnter={() => setCopyBtnHovered('kolugc-compare-all')}
           onMouseLeave={() => setCopyBtnHovered(null)}
@@ -1170,11 +1210,16 @@ const KolUgcComparePanel: React.FC<{
         </button>
       </div>
 
-      {/* KOL表格（上） */}
+      {/* KOL表格 */}
       {renderTable(kolCompareData, kolLoading, 'KOL')}
 
-      {/* UGC表格（下） */}
+
+      {/* ✅ KOC表格 */}
+      {renderTable(kocCompareData, kocLoading, 'KOC')}
+      {/* UGC表格 */}
       {renderTable(ugcCompareData, ugcLoading, 'UGC')}
+
+
     </div>
   );
 };
@@ -1203,6 +1248,13 @@ export default function MoleculeTablePage() {
     sortedDates: [],
     molecules: []
   });
+  // KOC数据（新增）
+const [kocTableData, setKocTableData] = useState<ProcessedTableData>({
+  grouped: {},
+  sortedDates: [],
+  molecules: []
+});
+
   // KOL数据
   const [kolTableData, setKolTableData] = useState<ProcessedTableData>({
     grouped: {},
@@ -1231,6 +1283,8 @@ export default function MoleculeTablePage() {
   const [kolLoading, setKolLoading] = useState(false);
   const [ugcLoading, setUgcLoading] = useState(false);
   const [platformLoading, setPlatformLoading] = useState(false); // 新增平台加载状态
+  const [kocLoading, setKocLoading] = useState(false);
+
 
   // 一级标签切换状态
   const [activeMainTab, setActiveMainTab] = useState<MainTabType>('kpiOverview');
@@ -1283,6 +1337,12 @@ export default function MoleculeTablePage() {
   const platformSovChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   const platformSoeChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
 
+
+// KOC图表引用（新增）
+const kocVoiceChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
+const kocInteractChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
+const kocSovAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
+const kocSoeAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   // 切换一级标签时重置二级标签为默认值
   useEffect(() => {
     if (activeMainTab === 'hcpNonHcp') {
@@ -1708,6 +1768,27 @@ export default function MoleculeTablePage() {
       fetchUgcData();
     }
   }, [activeMainTab, activeSubTab, refreshKey]);
+
+
+
+  // 获取KOC数据（拆分方式：KOC）- 新增
+useEffect(() => {
+  if (activeMainTab === 'kolUgc' && activeSubTab === 'koc') {
+    const fetchKocData = async () => {
+      try {
+        setKocLoading(true);
+        const res = await axios.get('/api/feishu/XHSKOC'); // ✅ 接口名按你项目规则
+        const processedTableData = processTableData(res.data as RawDataItem[], 'KOC');
+        setKocTableData(processedTableData);
+      } catch (err) {
+        console.error('KOC数据加载失败:', err);
+      } finally {
+        setKocLoading(false);
+      }
+    };
+    fetchKocData();
+  }
+}, [activeMainTab, activeSubTab, refreshKey]);
 
   // 新增：获取平台分布数据
   useEffect(() => {
@@ -2634,6 +2715,19 @@ export default function MoleculeTablePage() {
              tableStyles={tableStyles}
            />
          )}
+
+         {/* KOC面板 */}
+{activeMainTab === 'kolUgc' && activeSubTab === 'koc' && renderCommonPanel(
+  kocTableData,
+  kocLoading,
+  {
+    voice: kocVoiceChartRef,
+    interact: kocInteractChartRef,
+    sovArea: kocSovAreaChartRef,
+    soeArea: kocSoeAreaChartRef
+  },
+  'KOC'
+)}
 
 
 

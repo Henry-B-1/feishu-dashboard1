@@ -1436,13 +1436,13 @@ interface ProcessedPlatformData {
 // 定义一级标签类型
 type MainTabType = 'kpiOverview' | 'hcpNonHcp' | 'kolUgc' | 'voicePlatformDistribution';
 // 🌟 修改：扩展二级标签类型，增加对比面板
-type SubTabType = 'hcp' | 'nonHcp' | 'hcpNonHcpCompare' | 'kol' | 'ugc' | 'kolUgcCompare';
+type SubTabType = 'hcp' | 'nonHcp' | 'hcpNonHcpCompare' | 'kol' |'koc'| 'ugc' | 'kolUgcCompare';
 
 // 一级标签配置
 const mainTabConfig = [
   { key: 'kpiOverview', label: 'KPI总览' },
   { key: 'hcpNonHcp', label: 'HCP/NON-HCP' },
-  { key: 'kolUgc', label: 'KOL/UGC' },
+  { key: 'kolUgc', label: 'KOL/KOC/UGC' },
   //{ key: 'voicePlatformDistribution', label: '声量及互动量平台分布' }
 ];
 
@@ -1457,6 +1457,7 @@ const subTabConfigs = {
   kolUgc: [
    { key: 'kolUgcCompare' as SubTabType, label: 'KOL/UGC对比' },
     { key: 'kol' as SubTabType, label: 'KOL' },
+    { key: 'koc' as SubTabType, label: 'KOC' },
     { key: 'ugc' as SubTabType, label: 'UGC' },
 
   ]
@@ -2202,7 +2203,7 @@ const HcpNonHcpComparePanel: React.FC<{
 
 
 
-// 🌟 新增：KOL/UGC对比面板组件
+// 🌟 新增：KOL/KOC/UGC对比面板组件
 const KolUgcComparePanel: React.FC<{
   copyBtnHovered: string | null;
   setCopyBtnHovered: (key: string | null) => void;
@@ -2226,6 +2227,11 @@ const KolUgcComparePanel: React.FC<{
     sortedDates: [],
     brands: []
   });
+  const [kocCompareData, setKocCompareData] = useState<ProcessedTableData>({
+    grouped: {},
+    sortedDates: [],
+    brands: []
+  });
   const [ugcCompareData, setUgcCompareData] = useState<ProcessedTableData>({
     grouped: {},
     sortedDates: [],
@@ -2234,19 +2240,19 @@ const KolUgcComparePanel: React.FC<{
 
   // 加载状态
   const [kolLoading, setKolLoading] = useState(false);
+  const [kocLoading, setKocLoading] = useState(false);
   const [ugcLoading, setUgcLoading] = useState(false);
 
   // 数据处理函数（复用主组件的逻辑）
   const processTableData = (rawData: RawDataItem[], splitType: string): ProcessedTableData => {
     const filtered = rawData.filter(item =>
       item.fields?.['标题'] === '重点品牌声量及互动量表现（红书） ' &&
-      item.fields?.['拆分方式'] === splitType && // 根据传入的拆分方式筛选
+      item.fields?.['拆分方式'] === splitType &&
       item.fields?.['品牌']
     );
 
     const grouped: Record<string, Record<string, BrandData>> = {};
     const dates = new Set<string>();
-    // 定义标准品牌名称（用于匹配）
     const standardBrands = [
         '迪敏思',
         '雷诺考特',
@@ -2255,14 +2261,13 @@ const KolUgcComparePanel: React.FC<{
         '辅舒良',
         '开瑞坦'
     ];
-    // 创建名称映射（处理可能的名称变体）
     const brandNameMap: Record<string, string> = {
       '迪敏思': '迪敏思',
-            '雷诺考特': '雷诺考特',
-            '舒霏敏': '舒霏敏',
-            '内舒拿': '内舒拿',
-            '辅舒良': '辅舒良',
-            '开瑞坦': '开瑞坦',
+      '雷诺考特': '雷诺考特',
+      '舒霏敏': '舒霏敏',
+      '内舒拿': '内舒拿',
+      '辅舒良': '辅舒良',
+      '开瑞坦': '开瑞坦',
     };
 
     filtered.forEach(item => {
@@ -2273,16 +2278,13 @@ const KolUgcComparePanel: React.FC<{
 
       if (!date || !brand) return;
 
-      // 标准化品牌名称并映射到标准名称
       const normalizedName = normalizeBrandName(brand);
-      // 查找匹配的标准名称
       const matchedName = brandNameMap[normalizedName] ||
                           Object.entries(brandNameMap).find(([key]) =>
                             normalizedName.includes(key) || key.includes(normalizedName)
                           )?.[1] ||
                           normalizedName;
 
-      // 只处理标准列表中的品牌
       if (!standardBrands.includes(matchedName)) return;
 
       if (!grouped[date]) {
@@ -2293,26 +2295,13 @@ const KolUgcComparePanel: React.FC<{
       }
 
       dates.add(date);
-
-      // 确保值是有效的（处理百分比、空值等）
-      let processedValue = value;
-      if (processedValue === '' || processedValue === '无') {
-        processedValue = '-';
-      }
+      let processedValue = value === '' || value === '无' ? '-' : value;
 
       switch (indicator) {
-        case '总声量':
-          grouped[date][matchedName].totalVoice = processedValue;
-          break;
-        case 'SOV':
-          grouped[date][matchedName].sov = processedValue;
-          break;
-        case '总互动量':
-          grouped[date][matchedName].totalInteract = processedValue;
-          break;
-        case 'SOE':
-          grouped[date][matchedName].soe = processedValue;
-          break;
+        case '总声量': grouped[date][matchedName].totalVoice = processedValue; break;
+        case 'SOV': grouped[date][matchedName].sov = processedValue; break;
+        case '总互动量': grouped[date][matchedName].totalInteract = processedValue; break;
+        case 'SOE': grouped[date][matchedName].soe = processedValue; break;
       }
     });
 
@@ -2327,23 +2316,30 @@ const KolUgcComparePanel: React.FC<{
   useEffect(() => {
     const fetchCompareData = async () => {
       try {
-        // 加载KOL数据
+        // KOL
         setKolLoading(true);
         const kolRes = await axios.get('/api/feishu/XHSBrandKOL');
         const kolProcessed = processTableData(kolRes.data as RawDataItem[], 'KOL');
         setKolCompareData(kolProcessed);
 
-        // 加载UGC数据
+        // KOC
+        setKocLoading(true);
+        const kocRes = await axios.get('/api/feishu/XHSBrandKOC');
+        const kocProcessed = processTableData(kocRes.data as RawDataItem[], 'KOC');
+        setKocCompareData(kocProcessed);
+
+        // UGC
         setUgcLoading(true);
         const ugcRes = await axios.get('/api/feishu/XHSBrandUGC');
         const ugcProcessed = processTableData(ugcRes.data as RawDataItem[], 'UGC');
         setUgcCompareData(ugcProcessed);
       } catch (err) {
-        console.error('KOL/UGC对比数据加载失败:', err);
+        console.error('KOL/KOC/UGC对比数据加载失败:', err);
         setCopySuccess('数据加载失败，请刷新重试');
         setTimeout(() => setCopySuccess(''), 2000);
       } finally {
         setKolLoading(false);
+        setKocLoading(false);
         setUgcLoading(false);
       }
     };
@@ -2351,7 +2347,7 @@ const KolUgcComparePanel: React.FC<{
     fetchCompareData();
   }, [refreshKey]);
 
-  // 渲染单个表格（复用样式）
+  // 渲染单个表格
   const renderTable = (
     tableData: ProcessedTableData,
     loading: boolean,
@@ -2360,14 +2356,8 @@ const KolUgcComparePanel: React.FC<{
     if (loading) {
       return (
         <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '120px',
-          color: '#64748b',
-          background: '#fff',
-          borderRadius: '8px',
-          marginBottom: '24px'
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          height: '120px', color: '#64748b', background: '#fff', borderRadius: '8px', marginBottom: '24px'
         }}>
           {title}数据加载中...
         </div>
@@ -2376,37 +2366,26 @@ const KolUgcComparePanel: React.FC<{
 
     return (
       <div style={{ marginBottom: '32px' }}>
-        {/* 表格标题和复制按钮 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <span style={{ fontSize: '15px', fontWeight: 500, color: '#475569' }}>{title} 数据表格</span>
           <button
-            style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `kolugc-compare-${title}`)}
+            style={getCopyBtnStyle(loading || tableData.sortedDates.length === 0, `kolkocugc-compare-${title}`)}
             onClick={() => copyTableData(tableData, title)}
             disabled={loading || tableData.sortedDates.length === 0}
-            onMouseEnter={() => setCopyBtnHovered(`kolugc-compare-${title}`)}
+            onMouseEnter={() => setCopyBtnHovered(`kolkocugc-compare-${title}`)}
             onMouseLeave={() => setCopyBtnHovered(null)}
           >
             复制{title}表格数据到 Excel
           </button>
         </div>
 
-        {/* 表格内容 - 和HCP/NON-HCP面板样式完全一致 */}
         <div style={tableStyles.container}>
           <table style={tableStyles.table}>
             <thead>
               <tr style={tableStyles.headerRow1}>
-                <th
-                  rowSpan={3}
-                  style={{ ...tableStyles.headerCell, minWidth: '80px' }}
-                >
-                  月份
-                </th>
+                <th rowSpan={3} style={{ ...tableStyles.headerCell, minWidth: '80px' }}>月份</th>
                 {tableData.brands.map(bra => (
-                  <th
-                    key={bra}
-                    colSpan={4}
-                    style={{ ...bra === '迪敏思' ? tableStyles.diminsiHeaderCell :tableStyles.headerCell, minWidth: '250px' }}
-                  >
+                  <th key={bra} colSpan={4} style={{ ...bra === '迪敏思' ? tableStyles.diminsiHeaderCell : tableStyles.headerCell, minWidth: '250px' }}>
                     {bra}
                   </th>
                 ))}
@@ -2433,23 +2412,9 @@ const KolUgcComparePanel: React.FC<{
                       return (
                         <React.Fragment key={bra}>
                           <td style={tableStyles.cell}>{data.totalVoice}</td>
-                          <td
-                            style={{
-                              ...tableStyles.cell,
-                              color: data.sov.includes('%') ? '#16a34a' : '#1e293b'
-                            }}
-                          >
-                            {data.sov}
-                          </td>
+                          <td style={{ ...tableStyles.cell, color: data.sov.includes('%') ? '#16a34a' : '#1e293b' }}>{data.sov}</td>
                           <td style={tableStyles.cell}>{data.totalInteract}</td>
-                          <td
-                            style={{
-                              ...tableStyles.cell,
-                              color: data.soe.includes('%') ? '#16a34a' : '#1e293b'
-                            }}
-                          >
-                            {data.soe}
-                          </td>
+                          <td style={{ ...tableStyles.cell, color: data.soe.includes('%') ? '#16a34a' : '#1e293b' }}>{data.soe}</td>
                         </React.Fragment>
                       );
                     })}
@@ -2457,9 +2422,7 @@ const KolUgcComparePanel: React.FC<{
                 ))
               ) : (
                 <tr>
-                  <td colSpan={tableData.brands.length * 4 + 1} style={tableStyles.cell}>
-                    暂无相关数据
-                  </td>
+                  <td colSpan={tableData.brands.length * 4 + 1} style={tableStyles.cell}>暂无相关数据</td>
                 </tr>
               )}
             </tbody>
@@ -2469,48 +2432,36 @@ const KolUgcComparePanel: React.FC<{
     );
   };
 
-  // 批量复制两个表格数据
+  // 一键复制全部三个表格
   const copyAllCompareData = () => {
-    if (kolCompareData.sortedDates.length === 0 || ugcCompareData.sortedDates.length === 0) {
+    if (kolCompareData.sortedDates.length === 0 || kocCompareData.sortedDates.length === 0 || ugcCompareData.sortedDates.length === 0) {
       setCopySuccess('暂无数据可复制');
       setTimeout(() => setCopySuccess(''), 1500);
       return;
     }
 
-    // 构建KOL数据
-    const kolHeader = ['KOL - 月份'];
-    kolCompareData.brands.forEach(bra => {
-      kolHeader.push(`${bra}-总声量`, `${bra}-SOV`, `${bra}-总互动量`, `${bra}-SOE`);
-    });
-    const kolLines = [kolHeader.join('\t')];
-    kolCompareData.sortedDates.forEach(date => {
-      const row = [date];
-      kolCompareData.brands.forEach(bra => {
-        const data = kolCompareData.grouped[date][bra];
-        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
+    const buildLines = (prefix: string, data: ProcessedTableData) => {
+      const header = [prefix + ' - 月份'];
+      data.brands.forEach(bra => { header.push(`${bra}-总声量`, `${bra}-SOV`, `${bra}-总互动量`, `${bra}-SOE`); });
+      const lines = [header.join('\t')];
+      data.sortedDates.forEach(date => {
+        const row = [date];
+        data.brands.forEach(bra => {
+          const d = data.grouped[date][bra];
+          row.push(d.totalVoice, d.sov, d.totalInteract, d.soe);
+        });
+        lines.push(row.join('\t'));
       });
-      kolLines.push(row.join('\t'));
-    });
+      return lines;
+    };
 
-    // 构建UGC数据
-    const ugcHeader = ['\nUGC - 月份'];
-    ugcCompareData.brands.forEach(bra => {
-      ugcHeader.push(`${bra}-总声量`, `${bra}-SOV`, `${bra}-总互动量`, `${bra}-SOE`);
-    });
-    const ugcLines = [ugcHeader.join('\t')];
-    ugcCompareData.sortedDates.forEach(date => {
-      const row = [date];
-      ugcCompareData.brands.forEach(bra => {
-        const data = ugcCompareData.grouped[date][bra];
-        row.push(data.totalVoice, data.sov, data.totalInteract, data.soe);
-      });
-      ugcLines.push(row.join('\t'));
-    });
+    const kolLines = buildLines('KOL', kolCompareData);
+    const kocLines = buildLines('KOC', kocCompareData);
+    const ugcLines = buildLines('UGC', ugcCompareData);
 
-    // 合并并复制
-    const allData = [...kolLines, ...ugcLines].join('\n');
-    navigator.clipboard.writeText(allData).then(() => {
-      setCopySuccess('KOL/UGC对比数据已复制，可粘贴到Excel');
+    const all = [...kolLines, [''], ...kocLines, [''], ...ugcLines].join('\n');
+    navigator.clipboard.writeText(all).then(() => {
+      setCopySuccess('KOL/KOC/UGC对比数据已复制，可粘贴到Excel');
       setTimeout(() => setCopySuccess(''), 2000);
     }).catch(() => {
       setCopySuccess('复制失败，请手动复制');
@@ -2520,52 +2471,42 @@ const KolUgcComparePanel: React.FC<{
 
   return (
     <div style={{ padding: '8px 0' }}>
-      {/* 对比面板标题和批量复制按钮 */}
       <div style={{
-        marginBottom: '24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingBottom: '16px',
-        borderBottom: '1px solid #e5e7eb'
+        marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        paddingBottom: '16px', borderBottom: '1px solid #e5e7eb'
       }}>
-        <h2 style={{
-          fontSize: '18px',
-          color: '#1e293b',
-          fontWeight: 600,
-          margin: 0
-        }}>
-          KOL/UGC 数据对比
+        <h2 style={{ fontSize: '18px', color: '#1e293b', fontWeight: 600, margin: 0 }}>
+          KOL / KOC / UGC 数据对比
         </h2>
         <button
           style={getCopyBtnStyle(
-            kolLoading || ugcLoading ||
+            kolLoading || kocLoading || ugcLoading ||
             kolCompareData.sortedDates.length === 0 ||
+            kocCompareData.sortedDates.length === 0 ||
             ugcCompareData.sortedDates.length === 0,
-            'kolugc-compare-all'
+            'kolkocugc-compare-all'
           )}
           onClick={copyAllCompareData}
           disabled={
-            kolLoading || ugcLoading ||
+            kolLoading || kocLoading || ugcLoading ||
             kolCompareData.sortedDates.length === 0 ||
+            kocCompareData.sortedDates.length === 0 ||
             ugcCompareData.sortedDates.length === 0
           }
-          onMouseEnter={() => setCopyBtnHovered('kolugc-compare-all')}
+          onMouseEnter={() => setCopyBtnHovered('kolkocugc-compare-all')}
           onMouseLeave={() => setCopyBtnHovered(null)}
         >
           复制全部对比数据到 Excel
         </button>
       </div>
 
-      {/* KOL表格（上） */}
+      {/* KOL + KOC + UGC 三个表格依次展示 */}
       {renderTable(kolCompareData, kolLoading, 'KOL')}
-
-      {/* UGC表格（下） */}
+      {renderTable(kocCompareData, kocLoading, 'KOC')}
       {renderTable(ugcCompareData, ugcLoading, 'UGC')}
     </div>
   );
 };
-
 
 
 
@@ -2596,6 +2537,14 @@ export default function BrandTablePage() {
     sortedDates: [],
     brands: []
   });
+
+  // KOC数据（新增）
+const [kocTableData, setKocTableData] = useState<ProcessedTableData>({
+  grouped: {},
+  sortedDates: [],
+  brands: []
+});
+
   // UGC数据（新增）
   const [ugcTableData, setUgcTableData] = useState<ProcessedTableData>({
     grouped: {},
@@ -2616,6 +2565,7 @@ export default function BrandTablePage() {
   const [hcpLoading, setHcpLoading] = useState(false);
   const [nonHcpLoading, setNonHcpLoading] = useState(false);
   const [kolLoading, setKolLoading] = useState(false);
+  const [kocLoading, setKocLoading] = useState(false);
   const [ugcLoading, setUgcLoading] = useState(false);
   const [platformLoading, setPlatformLoading] = useState(false); // 新增平台加载状态
 
@@ -2657,6 +2607,13 @@ export default function BrandTablePage() {
   const kolInteractChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   const kolSovAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
   const kolSoeAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
+
+
+  // KOC图表引用（新增）
+const kocVoiceChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
+const kocInteractChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
+const kocSovAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
+const kocSoeAreaChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
 
   // UGC图表引用（新增）
   const ugcVoiceChartRef = useRef<ReactECharts>(null) as RefObject<ReactECharts>;
@@ -3077,6 +3034,25 @@ export default function BrandTablePage() {
       fetchKolData();
     }
   }, [activeMainTab, activeSubTab, refreshKey]);
+
+// 获取KOC数据（拆分方式：KOC）- 新增
+useEffect(() => {
+  if (activeMainTab === 'kolUgc' && activeSubTab === 'koc') {
+    const fetchKocData = async () => {
+      try {
+        setKocLoading(true);
+        const res = await axios.get('/api/feishu/XHSBrandKOC'); // ✅ 接口名按你项目规则
+        const processedTableData = processTableData(res.data as RawDataItem[], 'KOC');
+        setKocTableData(processedTableData);
+      } catch (err) {
+        console.error('KOC数据加载失败:', err);
+      } finally {
+        setKocLoading(false);
+      }
+    };
+    fetchKocData();
+  }
+}, [activeMainTab, activeSubTab, refreshKey]);
 
   // 获取UGC数据（拆分方式：UGC）- 新增
   useEffect(() => {
@@ -4031,6 +4007,19 @@ export default function BrandTablePage() {
              tableStyles={tableStyles}
            />
          )}
+
+         {/* KOC面板 */}
+{activeMainTab === 'kolUgc' && activeSubTab === 'koc' && renderCommonPanel(
+  kocTableData,
+  kocLoading,
+  {
+    voice: kocVoiceChartRef,
+    interact: kocInteractChartRef,
+    sovArea: kocSovAreaChartRef,
+    soeArea: kocSoeAreaChartRef
+  },
+  'KOC'
+)}
 
 
 
