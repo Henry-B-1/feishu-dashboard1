@@ -1715,12 +1715,42 @@ const getPlatformChartOption = (
   isPercentage: boolean = false
 ) => {
   // 为每个平台构建数据系列（原逻辑是为每个品牌构建）
+  const platformColorMap: Record<string, string> = {
+  微信: '#07C160',
+  小红书: '#FF2442',
+  抖音: '#000000',
+  微博: '#FF7D00'
+};
+// 备用颜色池（其他平台从这里循环取色）
+const defaultColors = [
+  '#E6F2FF', '#90b0e6', '#FFDF8C', '#CCCCCC',
+  '#36CFC9', '#FF9ECC', '#E6E6FF'
+];
+
+const usedColors = new Set<string>();
+
+  // 为每个平台构建数据系列
   const series = platforms.map((platform, index) => {
-    const colors = [
-      '#FF2442', '#07C160', '#FF7D00','#E6F2FF',
-      '#000000', '#90b0e6', '#FFDF8C', '#CCCCCC','#36CFC9','#FF9ECC'
-    ]; // 扩展颜色以适配多平台
-    // 提取该平台在各品牌的对应指标数据
+    let color;
+
+    // 1. 优先使用固定颜色
+    if (platformColorMap[platform]) {
+      color = platformColorMap[platform];
+    }
+    // 2. 没有固定色 → 从备用色板取【从未用过的颜色】
+    else {
+      for (let i = 0; i < defaultColors.length; i++) {
+        const candidate = defaultColors[i];
+        if (!usedColors.has(candidate)) {
+          color = candidate;
+          usedColors.add(color);
+          break;
+        }
+      }
+    }
+
+    // 如果备用色板用完了（极端情况），给一个默认色
+    if (!color) color = '#cccccc';
     const data = brands.map(brand => {
       // 查找该平台下对应品牌的数据
       const value = grouped[platform]?.[brand]?.[indicatorType] || '-';
@@ -1747,12 +1777,12 @@ const getPlatformChartOption = (
       stack: 'total', // 堆叠效果
       data: data,
       itemStyle: {
-        color: colors[index % colors.length], // 循环使用颜色
+        color: color, // 循环使用颜色
         borderRadius: [4, 4, 0, 0]
       },
       emphasis: {
         itemStyle: {
-          color: colors[index % colors.length],
+          color: color,
           opacity: 0.8
         }
       }
